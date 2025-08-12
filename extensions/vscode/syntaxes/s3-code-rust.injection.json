@@ -1,0 +1,9 @@
+{
+  "scopeName": "s3.code.rust.injection",
+  "injectionSelector": "L:meta.embedded.block.s3-code-rust",
+  "patterns": [
+    {
+      "include": "source.rust"
+    }
+  ]
+}

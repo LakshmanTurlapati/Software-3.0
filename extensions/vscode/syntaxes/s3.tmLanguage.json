@@ -74,8 +74,11 @@
         }
       },
       "name": "meta.property.instructions.s3",
-      "contentName": "meta.embedded.block.s3-instructions",
+      "contentName": "meta.embedded.block.s3-instructions text.html.markdown.s3",
       "patterns": [
+        {
+          "include": "text.html.markdown"
+        },
         {
           "include": "#string-escape"
         }
@@ -113,10 +116,22 @@
             }
           },
           "name": "meta.property.code.s3",
-          "contentName": "meta.embedded.block.s3-code-javascript",
+          "contentName": "meta.embedded.block.s3-code-javascript source.js",
           "patterns": [
             {
               "include": "#detect-python"
+            },
+            {
+              "include": "#detect-typescript"
+            },
+            {
+              "include": "#detect-go"
+            },
+            {
+              "include": "#detect-rust"
+            },
+            {
+              "include": "source.js"
             },
             {
               "include": "#string-escape"
@@ -127,8 +142,23 @@
     },
     "detect-python": {
       "comment": "Detect Python code and switch content name",
-      "match": "(?=.*(?:def\\s|import\\s|from\\s|class\\s|print\\(|if\\s__name__))",
-      "name": "meta.embedded.block.s3-code-python"
+      "match": "(?=.*(?:def\\s|import\\s|from\\s|class\\s|print\\(|if\\s__name__|async\\sdef|@\\w+))",
+      "name": "meta.embedded.block.s3-code-python source.python"
+    },
+    "detect-typescript": {
+      "comment": "Detect TypeScript code and switch content name",
+      "match": "(?=.*(?:interface\\s|type\\s.*=|:\\s*string|:\\s*number|export\\s|import\\stype))",
+      "name": "meta.embedded.block.s3-code-typescript source.ts"
+    },
+    "detect-go": {
+      "comment": "Detect Go code and switch content name",
+      "match": "(?=.*(?:package\\s|func\\s|import\\s\".*\"|fmt\\.|var\\s.*\\s*=))",
+      "name": "meta.embedded.block.s3-code-go source.go"
+    },
+    "detect-rust": {
+      "comment": "Detect Rust code and switch content name",
+      "match": "(?=.*(?:fn\\s|let\\smut|use\\s|struct\\s|impl\\s|println!))",
+      "name": "meta.embedded.block.s3-code-rust source.rust"
     },
     "property": {
       "begin": "(\")(\\w+)(\")(\\s*:\\s*)",

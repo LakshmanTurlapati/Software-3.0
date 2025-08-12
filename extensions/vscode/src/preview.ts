@@ -319,23 +319,214 @@ export class S3PreviewPanel {
   }
 
   private async _renderCodeWithVSCode(code: string, language: string): Promise<string> {
+    const config = vscode.workspace.getConfiguration('software3');
+    const engine = config.get('syntaxHighlighting.engine', 'vscode') as string;
+    
+    
+    // Try VS Code API first, then fallback to inline styles
     try {
-      const fenced = `\`\`\`${language}\n${code}\n\`\`\``;
-      const html = await vscode.commands.executeCommand('markdown.api.render', fenced) as string;
-      const match = html.match(/<pre[\s\S]*?<\/pre>/i);
-      if (match && match[0]) {
-        const block = match[0];
-        const looksUnhighlighted = !/class\s*=\s*"[^"]*shiki[^"]*"/i.test(block) && !/<span\b[^>]*>/.test(block);
-        if (!looksUnhighlighted) {
-          return block;
+      if (engine === 'vscode') {
+        const fenced = `\`\`\`${language}\n${code}\n\`\`\``;
+        const html = await vscode.commands.executeCommand('markdown.api.render', fenced) as string;
+        const match = html.match(/<pre[\s\S]*?<\/pre>/i);
+        if (match && match[0]) {
+          const block = match[0];
+          const hasHighlighting = /class\s*=\s*"[^"]*shiki[^"]*"/i.test(block) || /<span\b[^>]*>/.test(block);
+          if (hasHighlighting) {
+            return block;
+          }
         }
-        // Minimal fallback: wrap escaped code to keep layout; preview does not have internal regex highlighters
-        return `<pre><code class="language-${language}">${this._escapeHtml(code)}</code></pre>`;
       }
-      return `<pre><code class="language-${language}">${this._escapeHtml(code)}</code></pre>`;
-    } catch {
+      
+      // Enhanced fallback with inline styles highlighting
+      return this._renderWithInlineStyles(code, language);
+    } catch (error) {
+      return this._renderWithInlineStyles(code, language);
+    }
+  }
+
+  private _renderWithInlineStyles(code: string, language: string): string {
+    // Detect theme (light/dark) based on VS Code context
+    const isDark = vscode.window.activeColorTheme?.kind === vscode.ColorThemeKind.Dark;
+    
+    // Define color schemes
+    const colors = isDark ? {
+      keyword: '#C586C0',
+      string: '#CE9178',
+      comment: '#6A9955',
+      number: '#B5CEA8',
+      function: '#DCDCAA',
+      property: '#4EC9B0',
+      decorator: '#569CD6',
+      builtin: '#4FC1FF',
+      operator: '#D4D4D4',
+      punctuation: '#CCCCCC'
+    } : {
+      keyword: '#AF00DB',
+      string: '#A31515',
+      comment: '#008000',
+      number: '#098658',
+      function: '#795E26',
+      property: '#001080',
+      decorator: '#0000FF',
+      builtin: '#267F99',
+      operator: '#000000',
+      punctuation: '#000000'
+    };
+
+    let highlighted = this._escapeHtml(code);
+    
+    // Apply language-specific highlighting with inline styles
+    switch (language.toLowerCase()) {
+      case 'javascript':
+      case 'js':
+      case 'typescript':
+      case 'ts':
+        highlighted = this._highlightJavaScriptInline(highlighted, colors);
+        break;
+      case 'python':
+      case 'py':
+        highlighted = this._highlightPythonInline(highlighted, colors);
+        break;
+      case 'go':
+        highlighted = this._highlightGoInline(highlighted, colors);
+        break;
+      case 'rust':
+        highlighted = this._highlightRustInline(highlighted, colors);
+        break;
+      default:
+        highlighted = this._highlightGenericInline(highlighted, colors);
+    }
+    
+    return `<pre><code class="language-${language}">${highlighted}</code></pre>`;
+  }
+
+  private _renderWithBasicHighlighting(code: string, language: string): string {
+    const config = vscode.workspace.getConfiguration('software3');
+    const enableHighlighting = config.get('preview.syntaxHighlighting', true) as boolean;
+    
+    if (!enableHighlighting) {
       return `<pre><code class="language-${language}">${this._escapeHtml(code)}</code></pre>`;
     }
+    
+    // Apply basic syntax highlighting based on language
+    let highlighted = this._escapeHtml(code);
+    
+    switch (language.toLowerCase()) {
+      case 'javascript':
+      case 'js':
+      case 'typescript':
+      case 'ts':
+        highlighted = this._highlightJavaScript(highlighted);
+        break;
+      case 'python':
+      case 'py':
+        highlighted = this._highlightPython(highlighted);
+        break;
+      case 'go':
+        highlighted = this._highlightGo(highlighted);
+        break;
+      case 'rust':
+        highlighted = this._highlightRust(highlighted);
+        break;
+      default:
+        highlighted = this._highlightGeneric(highlighted);
+    }
+    
+    return `<pre><code class="language-${language}">${highlighted}</code></pre>`;
+  }
+
+  private _highlightJavaScript(code: string): string {
+    // Keywords
+    code = code.replace(/\b(const|let|var|function|class|if|else|for|while|do|switch|case|default|break|continue|return|try|catch|finally|throw|new|this|super|extends|implements|import|export|from|as|async|await|typeof|instanceof|interface|type)\b/g, 
+      '<span style="color: var(--vscode-charts-purple, #c586c0); font-weight: 600;">$1</span>');
+    
+    // Strings
+    code = code.replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: var(--vscode-charts-green, #ce9178);">$1$2$1</span>');
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, '<span style="color: var(--vscode-charts-orange, #d19a66);">$&</span>');
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    
+    // Functions
+    code = code.replace(/\b(\w+)(?=\s*\()/g, '<span style="color: var(--vscode-charts-blue, #61afef);">$1</span>');
+    
+    return code;
+  }
+
+  private _highlightPython(code: string): string {
+    // Keywords
+    code = code.replace(/\b(def|class|if|elif|else|for|while|try|except|finally|with|as|import|from|return|yield|break|continue|pass|lambda|and|or|not|in|is|True|False|None|async|await)\b/g, 
+      '<span style="color: var(--vscode-charts-purple, #c586c0); font-weight: 600;">$1</span>');
+    
+    // Strings
+    code = code.replace(/("""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')/g, '<span style="color: var(--vscode-charts-green, #ce9178);">$1</span>');
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, '<span style="color: var(--vscode-charts-orange, #d19a66);">$&</span>');
+    
+    // Comments
+    code = code.replace(/#.*$/gm, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    
+    // Decorators
+    code = code.replace(/@\w+/g, '<span style="color: var(--vscode-charts-red, #e06c75); font-weight: 600;">$&</span>');
+    
+    return code;
+  }
+
+  private _highlightGo(code: string): string {
+    // Keywords
+    code = code.replace(/\b(package|func|var|const|type|struct|interface|map|chan|if|else|for|range|switch|case|default|break|continue|return|go|defer|select)\b/g,
+      '<span style="color: var(--vscode-charts-purple, #c586c0); font-weight: 600;">$1</span>');
+    
+    // Strings
+    code = code.replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: var(--vscode-charts-green, #ce9178);">$1$2$1</span>');
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, '<span style="color: var(--vscode-charts-orange, #d19a66);">$&</span>');
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    
+    return code;
+  }
+
+  private _highlightRust(code: string): string {
+    // Keywords
+    code = code.replace(/\b(fn|let|mut|const|struct|enum|impl|trait|for|if|else|match|while|loop|break|continue|return|use|mod|pub|self|Self|super|crate)\b/g,
+      '<span style="color: var(--vscode-charts-purple, #c586c0); font-weight: 600;">$1</span>');
+    
+    // Strings
+    code = code.replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: var(--vscode-charts-green, #ce9178);">$1$2$1</span>');
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, '<span style="color: var(--vscode-charts-orange, #d19a66);">$&</span>');
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    
+    // Macros
+    code = code.replace(/(\w+!)(?=\s*\()/g, '<span style="color: var(--vscode-charts-red, #e06c75); font-weight: 600;">$1</span>');
+    
+    return code;
+  }
+
+  private _highlightGeneric(code: string): string {
+    // Strings
+    code = code.replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span style="color: var(--vscode-charts-green, #ce9178);">$1$2$1</span>');
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, '<span style="color: var(--vscode-charts-orange, #d19a66);">$&</span>');
+    
+    // Comments (various styles)
+    code = code.replace(/\/\/.*$/gm, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    code = code.replace(/#.*$/gm, '<span style="color: var(--vscode-descriptionForeground); font-style: italic; opacity: 0.85;">$&</span>');
+    
+    return code;
   }
 
   private _extractFenced(input: string): { lang?: string; code: string } {
@@ -345,6 +536,121 @@ export class S3PreviewPanel {
       return { lang: fence[1] || undefined, code: fence[2] || '' };
     }
     return { code: input };
+  }
+
+  /**
+   * Inline highlighting methods for preview
+   */
+  private _highlightJavaScriptInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(abstract|as|async|await|boolean|break|case|catch|class|const|constructor|continue|debugger|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|instanceof|interface|is|keyof|let|module|namespace|never|new|null|number|object|of|package|private|protected|public|readonly|return|set|static|string|super|switch|symbol|this|throw|true|try|type|typeof|undefined|unique|unknown|var|void|while|with|yield)\b/g, 
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments (do before strings to avoid conflicts)
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    code = code.replace(/\/\*[\s\S]*?\*\//g, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings (template literals, single, double quotes)
+    code = code.replace(/(`)((?:[^`\\]|\\.)*)(`)/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(0x[a-fA-F0-9]+|\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Functions
+    code = code.replace(/\b(\w+)(?=\s*\()/g, `<span style="color: ${colors.function};">$1</span>`);
+    
+    return code;
+  }
+
+  private _highlightPythonInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(and|as|assert|async|await|break|class|continue|def|del|elif|else|except|False|finally|for|from|global|if|import|in|is|lambda|None|nonlocal|not|or|pass|raise|return|True|try|while|with|yield)\b/g, 
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments
+    code = code.replace(/#.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings (triple quotes, single, double)
+    code = code.replace(/("""[\s\S]*?""")/g, `<span style="color: ${colors.string};">$1</span>`);
+    code = code.replace(/('''[\s\S]*?''')/g, `<span style="color: ${colors.string};">$1</span>`);
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?[jJ]?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Decorators
+    code = code.replace(/@\w+/g, `<span style="color: ${colors.decorator}; font-weight: 600;">$&</span>`);
+    
+    // Functions and classes
+    code = code.replace(/\b(def|class)\s+(\w+)/g, `$1 <span style="color: ${colors.function};">$2</span>`);
+    
+    return code;
+  }
+
+  private _highlightGoInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var)\b/g,
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(`)((?:[^`\\]|\\.)*?)(`)/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Functions
+    code = code.replace(/\bfunc\s+(\w+)/g, `func <span style="color: ${colors.function};">$1</span>`);
+    
+    return code;
+  }
+
+  private _highlightRustInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b/g,
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fiu]?(?:8|16|32|64|128|size)?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Macros
+    code = code.replace(/(\w+!)(?=\s*\()/g, `<span style="color: ${colors.decorator}; font-weight: 600;">$1</span>`);
+    
+    // Functions
+    code = code.replace(/\bfn\s+(\w+)/g, `fn <span style="color: ${colors.function};">$1</span>`);
+    
+    return code;
+  }
+
+  private _highlightGenericInline(code: string, colors: any): string {
+    // Comments (various styles)
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    code = code.replace(/\/\*[\s\S]*?\*\//g, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    code = code.replace(/#.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(`)((?:[^`\\]|\\.)*?)(`)/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    return code;
   }
 
   private _getErrorHtml(errorMessage: string): string {

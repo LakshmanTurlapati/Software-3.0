@@ -2,7 +2,7 @@
   "name": "software3-enhanced",
   "displayName": "Software3 Enhanced",
   "description": "Enhanced language support for Software 3 (.s3) files with FontAwesome icons, automatic language detection, and VS Code-style syntax highlighting",
-  "version": "1.1.8",
+  "version": "1.2.1",
   "publisher": "lakshman-turlapati",
   "engines": {
     "vscode": "^1.74.0"
@@ -178,6 +178,39 @@
         "tokenTypes": {
           "meta.embedded.block.s3-code-python": "other"
         }
+      },
+      {
+        "scopeName": "s3.code.typescript.injection",
+        "path": "./syntaxes/s3-code-typescript.injection.json",
+        "injectTo": ["source.s3"],
+        "embeddedLanguages": {
+          "meta.embedded.block.s3-code-typescript": "typescript"
+        },
+        "tokenTypes": {
+          "meta.embedded.block.s3-code-typescript": "other"
+        }
+      },
+      {
+        "scopeName": "s3.code.go.injection",
+        "path": "./syntaxes/s3-code-go.injection.json",
+        "injectTo": ["source.s3"],
+        "embeddedLanguages": {
+          "meta.embedded.block.s3-code-go": "go"
+        },
+        "tokenTypes": {
+          "meta.embedded.block.s3-code-go": "other"
+        }
+      },
+      {
+        "scopeName": "s3.code.rust.injection",
+        "path": "./syntaxes/s3-code-rust.injection.json",
+        "injectTo": ["source.s3"],
+        "embeddedLanguages": {
+          "meta.embedded.block.s3-code-rust": "rust"
+        },
+        "tokenTypes": {
+          "meta.embedded.block.s3-code-rust": "other"
+        }
       }
     ],
     "configuration": {
@@ -206,6 +239,29 @@
           "type": "boolean",
           "default": true,
           "description": "Enable syntax highlighting in code blocks"
+        },
+        "software3.syntaxHighlighting.engine": {
+          "type": "string",
+          "enum": [
+            "vscode",
+            "prism",
+            "regex"
+          ],
+          "default": "vscode",
+          "description": "Syntax highlighting engine: vscode (VS Code API), prism (Prism.js), or regex (fallback)"
+        },
+        "software3.syntaxHighlighting.theme": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "vs",
+            "vs-dark",
+            "github",
+            "dracula",
+            "monokai"
+          ],
+          "default": "auto",
+          "description": "Syntax highlighting theme (only applies to Prism.js engine)"
         },
         "software3.validation.strict": {
           "type": "boolean",

@@ -1,0 +1,9 @@
+{
+  "scopeName": "s3.code.go.injection",
+  "injectionSelector": "L:meta.embedded.block.s3-code-go",
+  "patterns": [
+    {
+      "include": "source.go"
+    }
+  ]
+}

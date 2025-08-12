@@ -114,37 +114,519 @@ export class S3DocumentEditor implements vscode.CustomReadonlyEditorProvider<S3C
   }
 
   /**
-   * Use VS Code's built-in Markdown renderer (Shiki-based) to colorize code so it matches the active theme
-   * Falls back to the local regex highlighter if the command is unavailable
+   * Enhanced syntax highlighting with improved fallback strategies
+   * Uses inline styles for reliable rendering in webview contexts
    */
   private async renderCodeWithVSCode(code: string, language: string): Promise<string> {
+    const config = vscode.workspace.getConfiguration('software3');
+    const engine = config.get('syntaxHighlighting.engine', 'vscode') as string;
+
+    // Try multiple highlighting approaches for reliability
+    const engines = ['hljs', 'inline', 'vscode', 'basic'];
+
+    for (const currentEngine of engines) {
+      try {
+        switch (currentEngine) {
+          case 'hljs':
+            const hljsResult = this.renderWithHighlightJS(code, language);
+            return hljsResult;
+          case 'vscode':
+            const vsCodeResult = await this.renderWithVSCodeAPI(code, language);
+            if (vsCodeResult) {
+              return vsCodeResult;
+            }
+            break;
+          case 'inline':
+            const inlineResult = this.renderWithInlineStyles(code, language);
+            return inlineResult;
+          case 'basic':
+            const basicResult = this.renderBasicHighlighting(code, language);
+            return basicResult;
+        }
+      } catch (error) {
+        console.error(`[S3Editor] ${currentEngine} highlighting failed:`, error);
+        continue;
+      }
+    }
+
+    // Ultimate fallback
+    return `<pre><code class="language-${language}">${this.escapeHtml(code)}</code></pre>`;
+  }
+
+  /**
+   * VS Code API-based highlighting using markdown renderer
+   */
+  private async renderWithVSCodeAPI(code: string, language: string): Promise<string | null> {
     try {
       const fenced = `\`\`\`${language}\n${code}\n\`\`\``;
       const html = await vscode.commands.executeCommand('markdown.api.render', fenced) as string;
-      // Extract the first <pre>...</pre> block
+      
       const match = html.match(/<pre[\s\S]*?<\/pre>/i);
+      
       if (match && match[0]) {
         const block = match[0];
-        // If no shiki classes or span tokens are present, treat as un-highlighted and fallback
-        const looksUnhighlighted = !/class\s*=\s*"[^"]*shiki[^"]*"/i.test(block) && !/<span\b[^>]*>/.test(block);
-        if (!looksUnhighlighted) {
+        
+        // Check if highlighting was successful (has shiki classes, hljs classes, or span elements)
+        const hasShikiHighlighting = /class\s*=\s*"[^"]*shiki[^"]*"/i.test(block);
+        const hasHljsHighlighting = /class\s*=\s*"[^"]*hljs[^"]*"/i.test(block);
+        const hasSpanHighlighting = /<span\b[^>]*class\s*=\s*"[^"]*token[^"]*"[^>]*>/.test(block);
+        const hasAnySpan = /<span\b[^>]*>/.test(block);
+        
+        const hasHighlighting = hasShikiHighlighting || hasHljsHighlighting || hasSpanHighlighting || hasAnySpan;
+        
+        if (hasHighlighting) {
           return block;
         }
-        // Fallback to internal highlighter
-        const highlighted = this.applySyntaxHighlighting(code, language);
-        return `<pre><code class="language-${language}">${highlighted}</code></pre>`;
       }
-      // As a safe fallback, escape and wrap plainly
-      return `<pre><code class="language-${language}">${this.escapeHtml(code)}</code></pre>`;
-    } catch {
-      // Fallback to local highlighter
-      const highlighted = this.applySyntaxHighlighting(code, language);
-      return `<pre><code class="language-${language}">${highlighted}</code></pre>`;
+      return null;
+    } catch (error) {
+      return null;
     }
   }
 
   /**
-   * Highlight JavaScript/TypeScript code with VS Code theme colors
+   * Prism.js-based highlighting with theme synchronization
+   */
+  private async renderWithPrism(code: string, language: string, theme: string): Promise<string | null> {
+    try {
+      // Map language aliases to Prism.js language identifiers
+      const languageMap: { [key: string]: string } = {
+        'javascript': 'javascript',
+        'js': 'javascript',
+        'typescript': 'typescript',
+        'ts': 'typescript',
+        'python': 'python',
+        'py': 'python',
+        'go': 'go',
+        'rust': 'rust',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c++': 'cpp',
+        'csharp': 'csharp',
+        'c#': 'csharp',
+        'php': 'php',
+        'ruby': 'ruby',
+        'css': 'css',
+        'html': 'markup',
+        'xml': 'markup',
+        'json': 'json',
+        'yaml': 'yaml',
+        'yml': 'yaml',
+        'bash': 'bash',
+        'shell': 'bash',
+        'sql': 'sql',
+        'markdown': 'markdown',
+        'md': 'markdown'
+      };
+
+      const prismLang = languageMap[language.toLowerCase()] || language.toLowerCase();
+      
+      // Determine theme based on VS Code's current theme
+      let prismTheme = theme;
+      if (theme === 'auto') {
+        const currentTheme = vscode.window.activeColorTheme;
+        prismTheme = currentTheme?.kind === vscode.ColorThemeKind.Dark ? 'vs-dark' : 'vs';
+      }
+
+      // Use Prism.js highlighting via web view script execution
+      // This is a simplified implementation - in a full implementation,
+      // you would include Prism.js files and execute highlighting
+      const highlighted = this.highlightWithPrismFallback(code, prismLang, prismTheme);
+      return `<pre class="language-${prismLang}" data-theme="${prismTheme}"><code class="language-${prismLang}">${highlighted}</code></pre>`;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Simplified Prism.js-style highlighting fallback
+   */
+  private highlightWithPrismFallback(code: string, language: string, theme: string): string {
+    // Enhanced regex-based highlighting that mimics Prism.js structure
+    let highlighted = this.escapeHtml(code);
+    
+    // Apply language-specific patterns with Prism.js-style classes
+    switch (language) {
+      case 'javascript':
+      case 'typescript':
+        highlighted = this.highlightJavaScriptPrism(highlighted);
+        break;
+      case 'python':
+        highlighted = this.highlightPythonPrism(highlighted);
+        break;
+      case 'go':
+        highlighted = this.highlightGoPrism(highlighted);
+        break;
+      case 'rust':
+        highlighted = this.highlightRustPrism(highlighted);
+        break;
+      default:
+        highlighted = this.highlightGenericPrism(highlighted);
+    }
+    
+    return highlighted;
+  }
+
+  /**
+   * Inline styles highlighting - reliable method using hardcoded colors
+   */
+  private renderWithInlineStyles(code: string, language: string): string {
+    // Detect theme (light/dark) based on VS Code context
+    const isDark = vscode.window.activeColorTheme?.kind === vscode.ColorThemeKind.Dark;
+    
+    // Define DEBUG color schemes - EXTREMELY BRIGHT COLORS FOR TESTING
+    const colors = isDark ? {
+      keyword: '#FF00FF',      // Bright magenta
+      string: '#00FF00',       // Bright green
+      comment: '#FFFF00',      // Bright yellow
+      number: '#FF0000',       // Bright red
+      function: '#00FFFF',     // Bright cyan
+      property: '#FFA500',     // Bright orange
+      decorator: '#FF69B4',    // Hot pink
+      builtin: '#9370DB',      // Medium purple
+      operator: '#FFFFFF',     // White
+      punctuation: '#FFFFFF'   // White
+    } : {
+      keyword: '#FF00FF',      // Bright magenta
+      string: '#008000',       // Green
+      comment: '#FF0000',      // Red
+      number: '#0000FF',       // Blue
+      function: '#FFA500',     // Orange
+      property: '#800080',     // Purple
+      decorator: '#FF1493',    // Deep pink
+      builtin: '#2E8B57',      // Sea green
+      operator: '#000000',     // Black
+      punctuation: '#000000'   // Black
+    };
+
+    let highlighted = this.escapeHtml(code);
+    
+    // Apply language-specific highlighting with inline styles
+    switch (language.toLowerCase()) {
+      case 'javascript':
+      case 'js':
+      case 'typescript':
+      case 'ts':
+        highlighted = this.highlightJavaScriptInline(highlighted, colors);
+        break;
+      case 'python':
+      case 'py':
+        highlighted = this.highlightPythonInline(highlighted, colors);
+        break;
+      case 'go':
+        highlighted = this.highlightGoInline(highlighted, colors);
+        break;
+      case 'rust':
+        highlighted = this.highlightRustInline(highlighted, colors);
+        break;
+      default:
+        highlighted = this.highlightGenericInline(highlighted, colors);
+    }
+    
+    return `<pre><code class="language-${language}">${highlighted}</code></pre>`;
+  }
+
+  /**
+   * Highlight.js-based highlighting - relies on client-side JS
+   */
+  private renderWithHighlightJS(code: string, language: string): string {
+    // Map some language names to highlight.js names
+    const langMap: { [key: string]: string } = {
+      'js': 'javascript',
+      'ts': 'typescript',
+      'py': 'python'
+    };
+    
+    const hljsLang = langMap[language.toLowerCase()] || language.toLowerCase();
+    const escapedCode = this.escapeHtml(code);
+    
+    // Return HTML that Highlight.js can process
+    return `<pre><code class="language-${hljsLang} hljs">${escapedCode}</code></pre>`;
+  }
+
+  /**
+   * Basic highlighting using simple patterns
+   */
+  private renderBasicHighlighting(code: string, language: string): string {
+    const highlighted = this.applySyntaxHighlighting(code, language);
+    return `<pre><code class="language-${language}">${highlighted}</code></pre>`;
+  }
+
+  /**
+   * JavaScript highlighting with inline styles
+   */
+  private highlightJavaScriptInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(abstract|as|async|await|boolean|break|case|catch|class|const|constructor|continue|debugger|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|instanceof|interface|is|keyof|let|module|namespace|never|new|null|number|object|of|package|private|protected|public|readonly|return|set|static|string|super|switch|symbol|this|throw|true|try|type|typeof|undefined|unique|unknown|var|void|while|with|yield)\b/g, 
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments (do before strings to avoid conflicts)
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    code = code.replace(/\/\*[\s\S]*?\*\//g, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings (template literals, single, double quotes)
+    code = code.replace(/(`)((?:[^`\\]|\\.)*)(`)/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(0x[a-fA-F0-9]+|\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Functions
+    code = code.replace(/\b(\w+)(?=\s*\()/g, `<span style="color: ${colors.function};">$1</span>`);
+    
+    return code;
+  }
+
+  /**
+   * Python highlighting with inline styles
+   */
+  private highlightPythonInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(and|as|assert|async|await|break|class|continue|def|del|elif|else|except|False|finally|for|from|global|if|import|in|is|lambda|None|nonlocal|not|or|pass|raise|return|True|try|while|with|yield)\b/g, 
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments
+    code = code.replace(/#.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings (triple quotes, single, double)
+    code = code.replace(/("""[\s\S]*?""")/g, `<span style="color: ${colors.string};">$1</span>`);
+    code = code.replace(/('''[\s\S]*?''')/g, `<span style="color: ${colors.string};">$1</span>`);
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?[jJ]?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Decorators
+    code = code.replace(/@\w+/g, `<span style="color: ${colors.decorator}; font-weight: 600;">$&</span>`);
+    
+    // Functions and classes
+    code = code.replace(/\b(def|class)\s+(\w+)/g, `$1 <span style="color: ${colors.function};">$2</span>`);
+    
+    return code;
+  }
+
+  /**
+   * Go highlighting with inline styles  
+   */
+  private highlightGoInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var)\b/g,
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(`)((?:[^`\\]|\\.)*?)(`)/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Functions
+    code = code.replace(/\bfunc\s+(\w+)/g, `func <span style="color: ${colors.function};">$1</span>`);
+    
+    return code;
+  }
+
+  /**
+   * Rust highlighting with inline styles
+   */
+  private highlightRustInline(code: string, colors: any): string {
+    // Keywords
+    code = code.replace(/\b(as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b/g,
+      `<span style="color: ${colors.keyword}; font-weight: 600;">$1</span>`);
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fiu]?(?:8|16|32|64|128|size)?)\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    // Macros
+    code = code.replace(/(\w+!)(?=\s*\()/g, `<span style="color: ${colors.decorator}; font-weight: 600;">$1</span>`);
+    
+    // Functions
+    code = code.replace(/\bfn\s+(\w+)/g, `fn <span style="color: ${colors.function};">$1</span>`);
+    
+    return code;
+  }
+
+  /**
+   * Generic highlighting with inline styles
+   */
+  private highlightGenericInline(code: string, colors: any): string {
+    // Comments (various styles)
+    code = code.replace(/\/\/.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    code = code.replace(/\/\*[\s\S]*?\*\//g, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    code = code.replace(/#.*$/gm, `<span style="color: ${colors.comment}; font-style: italic;">$&</span>`);
+    
+    // Strings
+    code = code.replace(/(')((?:[^'\\]|\\.)*?)(')/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(")((?:[^"\\]|\\.)*?)(")/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    code = code.replace(/(`)((?:[^`\\]|\\.)*?)(`)/g, `<span style="color: ${colors.string};">$1$2$3</span>`);
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, `<span style="color: ${colors.number};">$1</span>`);
+    
+    return code;
+  }
+
+  /**
+   * Enhanced JavaScript/TypeScript highlighting with Prism.js-style classes
+   */
+  private highlightJavaScriptPrism(code: string): string {
+    // Keywords with more comprehensive list
+    code = code.replace(/\b(abstract|as|async|await|boolean|break|case|catch|class|const|constructor|continue|debugger|declare|default|delete|do|else|enum|export|extends|false|finally|for|from|function|get|if|implements|import|in|instanceof|interface|is|keyof|let|module|namespace|never|new|null|number|object|of|package|private|protected|public|readonly|return|set|static|string|super|switch|symbol|this|throw|true|try|type|typeof|undefined|unique|unknown|var|void|while|with|yield)\b/g, 
+      '<span class="token keyword">$1</span>');
+    
+    // Strings with better template literal support
+    code = code.replace(/(`)((?:\\.|\$\{[^}]*\}|(?!\1)[^\\])*?)\1/g, '<span class="token template-string"><span class="token string">$1$2$1</span></span>');
+    code = code.replace(/(['"])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="token string">$1$2$1</span>');
+    
+    // Numbers and hex
+    code = code.replace(/\b(0x[a-fA-F0-9]+|\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, '<span class="token number">$&</span>');
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, '<span class="token comment">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span class="token comment">$&</span>');
+    
+    // Functions and methods
+    code = code.replace(/\b(\w+)(?=\s*\()/g, '<span class="token function">$1</span>');
+    
+    // Properties and attributes
+    code = code.replace(/\.(\w+)/g, '.<span class="token property">$1</span>');
+    
+    // Operators
+    code = code.replace(/([+\-*/%=<>!&|^~?:])/g, '<span class="token operator">$1</span>');
+    
+    // Punctuation
+    code = code.replace(/([{}\[\]();,])/g, '<span class="token punctuation">$1</span>');
+    
+    return code;
+  }
+
+  /**
+   * Enhanced Python highlighting with Prism.js-style classes
+   */
+  private highlightPythonPrism(code: string): string {
+    // Keywords
+    code = code.replace(/\b(and|as|assert|async|await|break|class|continue|def|del|elif|else|except|False|finally|for|from|global|if|import|in|is|lambda|None|nonlocal|not|or|pass|raise|return|True|try|while|with|yield)\b/g, 
+      '<span class="token keyword">$1</span>');
+    
+    // Built-in functions
+    code = code.replace(/\b(abs|all|any|ascii|bin|bool|bytearray|bytes|callable|chr|classmethod|compile|complex|delattr|dict|dir|divmod|enumerate|eval|exec|filter|float|format|frozenset|getattr|globals|hasattr|hash|help|hex|id|input|int|isinstance|issubclass|iter|len|list|locals|map|max|memoryview|min|next|object|oct|open|ord|pow|print|property|range|repr|reversed|round|set|setattr|slice|sorted|staticmethod|str|sum|super|tuple|type|vars|zip)\b/g,
+      '<span class="token builtin">$1</span>');
+    
+    // Strings with f-strings and raw strings
+    code = code.replace(/(f|r|fr|rf)?(['"])((?:\\.|(?!\2)[^\\])*?)\2/g, '<span class="token string">$1$2$3$2</span>');
+    code = code.replace(/(f|r|fr|rf)?("""|''')((?:\\.|(?!\2)[\s\S])*?)\2/g, '<span class="token string">$1$2$3$2</span>');
+    
+    // Numbers
+    code = code.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?[jJ]?)\b/g, '<span class="token number">$&</span>');
+    
+    // Comments
+    code = code.replace(/#.*$/gm, '<span class="token comment">$&</span>');
+    
+    // Decorators
+    code = code.replace(/@\w+/g, '<span class="token decorator">$&</span>');
+    
+    // Functions and classes
+    code = code.replace(/\b(def|class)\s+(\w+)/g, '$1 <span class="token function">$2</span>');
+    
+    // Self parameter
+    code = code.replace(/\bself\b/g, '<span class="token keyword">$&</span>');
+    
+    return code;
+  }
+
+  /**
+   * Go language highlighting with Prism.js-style classes
+   */
+  private highlightGoPrism(code: string): string {
+    // Keywords
+    code = code.replace(/\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var)\b/g,
+      '<span class="token keyword">$1</span>');
+    
+    // Built-in types
+    code = code.replace(/\b(bool|byte|complex128|complex64|error|float32|float64|int|int16|int32|int64|int8|rune|string|uint|uint16|uint32|uint64|uint8|uintptr)\b/g,
+      '<span class="token builtin">$1</span>');
+    
+    // Strings
+    code = code.replace(/(`)((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="token string">$1$2$1</span>');
+    code = code.replace(/(['"])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="token string">$1$2$1</span>');
+    
+    // Numbers
+    code = code.replace(/\b(\d+\.?\d*(?:[eE][+-]?\d+)?)\b/g, '<span class="token number">$&</span>');
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, '<span class="token comment">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span class="token comment">$&</span>');
+    
+    // Functions
+    code = code.replace(/\bfunc\s+(\w+)/g, 'func <span class="token function">$1</span>');
+    
+    return code;
+  }
+
+  /**
+   * Rust language highlighting with Prism.js-style classes
+   */
+  private highlightRustPrism(code: string): string {
+    // Keywords
+    code = code.replace(/\b(as|async|await|break|const|continue|crate|dyn|else|enum|extern|false|fn|for|if|impl|in|let|loop|match|mod|move|mut|pub|ref|return|self|Self|static|struct|super|trait|true|type|unsafe|use|where|while)\b/g,
+      '<span class="token keyword">$1</span>');
+    
+    // Built-in types
+    code = code.replace(/\b(bool|char|f32|f64|i8|i16|i32|i64|i128|isize|str|u8|u16|u32|u64|u128|usize)\b/g,
+      '<span class="token builtin">$1</span>');
+    
+    // Strings and characters
+    code = code.replace(/(r#*)?(['"])((?:\\.|(?!\2)[^\\])*?)\2(#*)?/g, '<span class="token string">$1$2$3$2$4</span>');
+    
+    // Numbers
+    code = code.replace(/\b(\d+(?:\.\d+)?(?:[eE][+-]?\d+)?[fiu]?(?:8|16|32|64|128|size)?)\b/g, '<span class="token number">$&</span>');
+    
+    // Comments
+    code = code.replace(/\/\/.*$/gm, '<span class="token comment">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span class="token comment">$&</span>');
+    
+    // Macros
+    code = code.replace(/(\w+!)\s*\(/g, '<span class="token macro">$1</span>(');
+    
+    // Functions
+    code = code.replace(/\bfn\s+(\w+)/g, 'fn <span class="token function">$1</span>');
+    
+    return code;
+  }
+
+  /**
+   * Generic highlighting for unknown languages
+   */
+  private highlightGenericPrism(code: string): string {
+    // Strings
+    code = code.replace(/(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g, '<span class="token string">$1$2$1</span>');
+    
+    // Numbers
+    code = code.replace(/\b\d+\.?\d*\b/g, '<span class="token number">$&</span>');
+    
+    // Comments (various styles)
+    code = code.replace(/\/\/.*$/gm, '<span class="token comment">$&</span>');
+    code = code.replace(/\/\*[\s\S]*?\*\//g, '<span class="token comment">$&</span>');
+    code = code.replace(/#.*$/gm, '<span class="token comment">$&</span>');
+    
+    return code;
+  }
+
+  /**
+   * Legacy JavaScript/TypeScript highlighting with VS Code theme colors
    */
   private highlightJavaScript(code: string): string {
     // Keywords
@@ -483,9 +965,12 @@ export class S3DocumentEditor implements vscode.CustomReadonlyEditorProvider<S3C
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource};">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com; script-src ${webview.cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com; font-src ${webview.cspSource}; img-src ${webview.cspSource} data:;">
         <title>Software 3 Document</title>
         <link rel="stylesheet" href="${fontAwesomeUri}">
+        <!-- DEBUG: Try Highlight.js as alternative -->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
         <style>
           body {
             padding: 20px;
@@ -557,6 +1042,7 @@ export class S3DocumentEditor implements vscode.CustomReadonlyEditorProvider<S3C
           }
           
           /* Theme-aware token colors using chart palette for strong contrast in webviews */
+          /* Legacy token classes for backwards compatibility */
           .token-keyword {
             color: var(--vscode-charts-purple, #c586c0);
             font-weight: 600;
@@ -586,6 +1072,50 @@ export class S3DocumentEditor implements vscode.CustomReadonlyEditorProvider<S3C
             color: var(--vscode-charts-blue, #61afef);
           }
           .token-value {
+            color: var(--vscode-charts-green, #98c379);
+          }
+          
+          /* Prism.js-style token classes for enhanced highlighting */
+          .token.keyword {
+            color: var(--vscode-charts-purple, #c586c0);
+            font-weight: 600;
+          }
+          .token.string, .token.template-string {
+            color: var(--vscode-charts-green, #ce9178);
+          }
+          .token.comment {
+            color: var(--vscode-descriptionForeground);
+            font-style: italic;
+            opacity: 0.85;
+          }
+          .token.number {
+            color: var(--vscode-charts-orange, #d19a66);
+          }
+          .token.function {
+            color: var(--vscode-charts-blue, #61afef);
+          }
+          .token.property {
+            color: var(--vscode-charts-yellow, #e5c07b);
+          }
+          .token.decorator, .token.macro {
+            color: var(--vscode-charts-red, #e06c75);
+            font-weight: 600;
+          }
+          .token.builtin {
+            color: var(--vscode-charts-cyan, #56b6c2);
+            font-weight: 500;
+          }
+          .token.operator {
+            color: var(--vscode-symbolIcon-operatorForeground, #569cd6);
+          }
+          .token.punctuation {
+            color: var(--vscode-foreground);
+            opacity: 0.7;
+          }
+          .token.selector {
+            color: var(--vscode-charts-blue, #61afef);
+          }
+          .token.value {
             color: var(--vscode-charts-green, #98c379);
           }
           
@@ -816,7 +1346,15 @@ export class S3DocumentEditor implements vscode.CustomReadonlyEditorProvider<S3C
             }
           }
           
-          // VS Code native syntax highlighting is already applied
+          // Initialize Highlight.js if available
+          if (typeof hljs !== 'undefined') {
+            hljs.highlightAll();
+            
+            // Force highlight any pre>code blocks
+            document.querySelectorAll('pre code').forEach((block) => {
+              hljs.highlightElement(block);
+            });
+          }
           
           // Theme detection and body class management for better VS Code integration
           function detectTheme() {

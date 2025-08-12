@@ -1,0 +1,9 @@
+{
+  "scopeName": "s3.code.typescript.injection",
+  "injectionSelector": "L:meta.embedded.block.s3-code-typescript",
+  "patterns": [
+    {
+      "include": "source.ts"
+    }
+  ]
+}
