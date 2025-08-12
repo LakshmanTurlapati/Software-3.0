@@ -1,0 +1,466 @@
+import * as vscode from 'vscode';
+import { S3DocumentEditor } from './editor';
+
+let outputChannel: vscode.OutputChannel;
+
+export function activate(context: vscode.ExtensionContext) {
+  try {
+    console.log('Software3 extension: Starting activation...');
+    
+    // Software 3 extension is now active
+    
+    // Create output channel
+    outputChannel = vscode.window.createOutputChannel('Software3');
+    context.subscriptions.push(outputChannel);
+    outputChannel.appendLine('Software3 extension activated');
+
+    // Register custom editor for .s3 files
+    try {
+      const editorRegistration = S3DocumentEditor.register(context);
+      context.subscriptions.push(editorRegistration);
+      outputChannel.appendLine('Custom editor registered successfully');
+    } catch (error: any) {
+      outputChannel.appendLine(`Failed to register custom editor: ${error.message}`);
+      vscode.window.showErrorMessage(`Software3: Failed to register custom editor: ${error.message}`);
+      console.error('Failed to register custom editor:', error);
+    }
+
+    // Register commands
+    try {
+      registerCommands(context);
+      outputChannel.appendLine('Commands registered successfully');
+    } catch (error: any) {
+      outputChannel.appendLine(`Failed to register commands: ${error.message}`);
+      vscode.window.showErrorMessage(`Software3: Failed to register commands: ${error.message}`);
+      console.error('Failed to register commands:', error);
+    }
+
+    console.log('Software3 extension: Activation completed successfully');
+  } catch (error: any) {
+    console.error('Software3 extension: Activation failed:', error);
+    vscode.window.showErrorMessage(`Software3: Extension activation failed: ${error.message}`);
+    throw error;
+  }
+}
+
+function registerCommands(context: vscode.ExtensionContext) {
+
+  // Export to HTML command
+  const exportHtmlCommand = vscode.commands.registerCommand('software3.export.html', async (uri?: vscode.Uri) => {
+    const resource = uri || vscode.window.activeTextEditor?.document.uri;
+    if (!resource) {
+      vscode.window.showErrorMessage('No .s3 file selected');
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(resource);
+      const decoder = new TextDecoder();
+      const document = JSON.parse(decoder.decode(content));
+      
+      // Simple HTML generation
+      const html = generateSimpleHtml(document);
+      
+      const outputPath = resource.fsPath.replace(/\.s3$/, '.html');
+      const outputUri = vscode.Uri.file(outputPath);
+      
+      const encoder = new TextEncoder();
+      await vscode.workspace.fs.writeFile(outputUri, encoder.encode(html));
+      
+      vscode.window.showInformationMessage(`Exported to ${outputPath}`);
+      
+      const openFile = await vscode.window.showInformationMessage(
+        'Export complete! Would you like to open the HTML file?',
+        'Open File',
+        'Cancel'
+      );
+      
+      if (openFile === 'Open File') {
+        await vscode.env.openExternal(outputUri);
+      }
+    } catch (error: any) {
+      vscode.window.showErrorMessage(`Export failed: ${error.message || 'Unknown error'}`);
+      outputChannel.appendLine(`Export error: ${error}`);
+    }
+  });
+
+  // Export to Markdown command
+  const exportMarkdownCommand = vscode.commands.registerCommand('software3.export.markdown', async (uri?: vscode.Uri) => {
+    const resource = uri || vscode.window.activeTextEditor?.document.uri;
+    if (!resource) {
+      vscode.window.showErrorMessage('No .s3 file selected');
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(resource);
+      const decoder = new TextDecoder();
+      const document = JSON.parse(decoder.decode(content));
+      
+      // Simple Markdown generation
+      const markdown = generateSimpleMarkdown(document);
+      
+      const outputPath = resource.fsPath.replace(/\.s3$/, '.md');
+      const outputUri = vscode.Uri.file(outputPath);
+      
+      const encoder = new TextEncoder();
+      await vscode.workspace.fs.writeFile(outputUri, encoder.encode(markdown));
+      
+      vscode.window.showInformationMessage(`Exported to ${outputPath}`);
+      
+      const openFile = await vscode.window.showInformationMessage(
+        'Export complete! Would you like to open the Markdown file?',
+        'Open File',
+        'Cancel'
+      );
+      
+      if (openFile === 'Open File') {
+        await vscode.commands.executeCommand('vscode.open', outputUri);
+      }
+    } catch (error: any) {
+      vscode.window.showErrorMessage(`Export failed: ${error.message || 'Unknown error'}`);
+      outputChannel.appendLine(`Export error: ${error}`);
+    }
+  });
+
+  // Validate command
+  const validateCommand = vscode.commands.registerCommand('software3.validate', async (uri?: vscode.Uri) => {
+    const resource = uri || vscode.window.activeTextEditor?.document.uri;
+    if (!resource) {
+      vscode.window.showErrorMessage('No .s3 file selected');
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(resource);
+      const validation = validateS3Document(content.toString());
+
+      if (validation.valid) {
+        vscode.window.showInformationMessage('Document is valid!');
+      } else {
+        const errorCount = validation.errors.length;
+        vscode.window.showErrorMessage(`Validation failed: ${errorCount} error(s)`);
+        
+        // Show detailed errors in output channel
+        outputChannel.clear();
+        outputChannel.appendLine('Software3 Validation Results');
+        outputChannel.appendLine('================================');
+        
+        validation.errors.forEach((error: any, index: number) => {
+          outputChannel.appendLine(`${index + 1}. ${error.message} (${error.path})`);
+        });
+        
+        outputChannel.show();
+      }
+    } catch (error: any) {
+      vscode.window.showErrorMessage(`Validation failed: ${error.message || 'Unknown error'}`);
+      outputChannel.appendLine(`Validation error: ${error}`);
+    }
+  });
+
+  // Statistics command
+  const statsCommand = vscode.commands.registerCommand('software3.stats', async (uri?: vscode.Uri) => {
+    const resource = uri || vscode.window.activeTextEditor?.document.uri;
+    if (!resource) {
+      vscode.window.showErrorMessage('No .s3 file selected');
+      return;
+    }
+
+    try {
+      const content = await vscode.workspace.fs.readFile(resource);
+      const decoder = new TextDecoder();
+      const document = JSON.parse(decoder.decode(content));
+      const stats = generateStats(document);
+
+      const message = `Document Statistics:
+
+Blocks: ${stats.totalBlocks}
+Estimated Reading Time: ${stats.estimatedReadingTime} minutes
+Languages: ${stats.languages.join(', ')}`;
+
+      vscode.window.showInformationMessage(message, { modal: true });
+    } catch (error: any) {
+      vscode.window.showErrorMessage(`Failed to generate statistics: ${error.message || 'Unknown error'}`);
+    }
+  });
+
+  // Create new document command
+  const createCommand = vscode.commands.registerCommand('software3.create', async () => {
+    const title = await vscode.window.showInputBox({
+      prompt: 'Enter document title',
+      placeHolder: 'My Software 3 Document'
+    });
+
+    if (!title) {
+      return;
+    }
+
+    const author = await vscode.window.showInputBox({
+      prompt: 'Enter author name (optional)',
+      placeHolder: 'Your Name'
+    });
+
+    const document = createS3Document(title, author || 'Unknown');
+    const content = JSON.stringify(document, null, 2);
+    
+    const fileName = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') + '.s3';
+    const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+    const newFileUri = vscode.Uri.file(`${workspaceRoot}/${fileName}`);
+    
+    const encoder = new TextEncoder();
+    await vscode.workspace.fs.writeFile(newFileUri, encoder.encode(content));
+    
+    await vscode.window.showTextDocument(newFileUri);
+    vscode.window.showInformationMessage(`Created new Software3 document: ${fileName}`);
+  });
+
+  // Auto-populate empty .s3 files when opened
+  const onDidOpenTextDocument = vscode.workspace.onDidOpenTextDocument(async (document) => {
+    if (document.fileName.endsWith('.s3') && document.getText().trim() === '') {
+      const templateContent = JSON.stringify(createS3Document('New Document', 'Author'), null, 2);
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), templateContent);
+      await vscode.workspace.applyEdit(edit);
+    }
+  });
+
+  // Register all commands and event handlers
+  context.subscriptions.push(
+    exportHtmlCommand,
+    exportMarkdownCommand,
+    validateCommand,
+    statsCommand,
+    createCommand,
+    onDidOpenTextDocument
+  );
+}
+
+
+// Helper functions
+function detectLanguage(code: string): string {
+  try {
+    // Simple pattern-based language detection - no external dependencies
+    
+    // Check for specific language patterns
+    if (code.includes('def ') || code.includes('import ') && code.includes('from ') || 
+        code.includes('print(') || /^\s*#[^{]/.test(code)) {
+      return 'python';
+    }
+    
+    if (code.includes('function ') || code.includes('const ') || code.includes('let ') || 
+        code.includes('console.log') || code.includes('=>') || code.includes('typeof')) {
+      return 'javascript';
+    }
+    
+    if (code.includes('interface ') || code.includes(': string') || code.includes(': number') ||
+        code.includes('export ') || code.includes('import type')) {
+      return 'typescript';
+    }
+    
+    if (code.includes('public class') || code.includes('private ') || code.includes('System.out') ||
+        code.includes('public static void main')) {
+      return 'java';
+    }
+    
+    if (code.includes('package main') || code.includes('func ') || code.includes('fmt.Print')) {
+      return 'go';
+    }
+    
+    if (code.includes('fn ') || code.includes('println!') || code.includes('let mut ')) {
+      return 'rust';
+    }
+    
+    if (code.includes('<?php') || code.includes('echo ') || code.includes('$')) {
+      return 'php';
+    }
+    
+    if (code.includes('class ') && (code.includes('def ') || code.includes('end'))) {
+      return 'ruby';
+    }
+    
+    if (code.includes('#include') || code.includes('std::') || code.includes('cout')) {
+      return 'cpp';
+    }
+    
+    if (code.includes('using ') || code.includes('Console.Write')) {
+      return 'csharp';
+    }
+    
+    if (code.includes('<html') || code.includes('<div') || code.includes('</')) {
+      return 'html';
+    }
+    
+    if (code.includes('{') && code.includes('}') && (code.includes(':') || code.includes('"'))) {
+      // Check for JSON pattern
+      try {
+        JSON.parse(code);
+        return 'json';
+      } catch {
+        // JSON parsing failed
+      }
+    }
+    
+    if (code.includes('body {') || code.includes('color:') || code.includes('.class')) {
+      return 'css';
+    }
+    
+    // Default fallback
+    return 'javascript';
+  } catch (error) {
+    console.log('[S3Extension] Language detection failed, defaulting to javascript');
+    return 'javascript';
+  }
+}
+
+function generateSimpleHtml(document: any): string {
+  // Handle both old and new format
+  let instructions = '';
+  let code = '';
+  
+  if (document.instructions && document.code) {
+    // New simplified format
+    instructions = document.instructions;
+    code = document.code;
+  } else if (document.blocks && document.blocks.length > 0) {
+    // Old format fallback
+    instructions = document.blocks[0].text || 'No instructions';
+    code = document.blocks[0].code || '// No code';
+  } else {
+    instructions = '# Empty Document\nThis document is empty.';
+    code = '// Empty document';
+  }
+
+  const detectedLanguage = detectLanguage(code);
+
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <title>Software 3 Document</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-vs.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-${detectedLanguage}.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+    .container { border: 1px solid #ccc; border-radius: 8px; overflow: hidden; position: relative; }
+    .code-icon { position: absolute; top: 15px; right: 15px; background: #007acc; color: white; border: none; border-radius: 6px; width: 32px; height: 32px; cursor: pointer; z-index: 10; font-size: 14px; }
+    .instructions { padding: 50px 25px 25px 25px; }
+    .code { padding: 50px 25px 25px 25px; background: #1e1e1e; display: none; }
+    pre { margin: 0; font-family: 'Consolas', 'Monaco', 'Courier New', monospace; overflow-x: auto; background: transparent !important; }
+    code { background: transparent !important; color: #d4d4d4 !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <button class="code-icon" onclick="toggleView()"><i class="fas fa-code" id="toggle-icon"></i></button>
+    <div class="instructions" id="instructions">${instructions.replace(/\n/g, '<br>')}</div>
+    <div class="code" id="code"><pre><code class="language-${detectedLanguage}">${code}</code></pre></div>
+  </div>
+  <script>
+    let showingCode = false;
+    function toggleView() {
+      const instructions = document.getElementById('instructions');
+      const code = document.getElementById('code');
+      const icon = document.getElementById('toggle-icon');
+      const button = document.querySelector('.code-icon');
+      if (showingCode) {
+        instructions.style.display = 'block';
+        code.style.display = 'none';
+        icon.className = 'fas fa-code';
+        button.title = 'View code';
+        showingCode = false;
+      } else {
+        instructions.style.display = 'none';
+        code.style.display = 'block';
+        icon.className = 'fas fa-file-lines';
+        button.title = 'Back to instructions';
+        showingCode = true;
+        Prism.highlightAll();
+      }
+    }
+    window.addEventListener('load', function() {
+      Prism.highlightAll();
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function generateSimpleMarkdown(document: any): string {
+  // Handle both old and new format
+  if (document.instructions && document.code) {
+    // New simplified format
+    return `${document.instructions}\n\n\`\`\`\n${document.code}\n\`\`\`\n`;
+  } else if (document.blocks && document.blocks.length > 0) {
+    // Old format fallback
+    let markdown = `# ${document.title || 'Software 3 Document'}\n\n`;
+    document.blocks.forEach((block: any) => {
+      markdown += `${block.text}\n\n`;
+      markdown += `\`\`\`${block.language || ''}\n${block.code}\n\`\`\`\n\n`;
+    });
+    return markdown;
+  } else {
+    return '# Empty Document\n\nThis document is empty.';
+  }
+}
+
+function validateS3Document(content: string): { valid: boolean; errors: any[] } {
+  try {
+    const document = JSON.parse(content);
+    const errors: any[] = [];
+
+    // Check for new simplified format
+    if (document.instructions !== undefined && document.code !== undefined) {
+      // New format is valid if both fields exist
+      if (typeof document.instructions !== 'string') {
+        errors.push({ message: 'Instructions must be a string', path: '/instructions', code: 'invalid_type' });
+      }
+      if (typeof document.code !== 'string') {
+        errors.push({ message: 'Code must be a string', path: '/code', code: 'invalid_type' });
+      }
+    } else {
+      // Fallback to old format validation
+      if (!Array.isArray(document.blocks)) {
+        errors.push({ message: 'Missing "instructions" and "code" fields, or "blocks" array for legacy format', path: '/', code: 'missing_field' });
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  } catch (error: any) {
+    return { 
+      valid: false, 
+      errors: [{ message: 'Invalid JSON', path: '', code: 'parse_error' }] 
+    };
+  }
+}
+
+function generateStats(document: any): any {
+  const languages = new Set();
+  
+  document.blocks?.forEach((block: any) => {
+    if (block.language === 'multi' && typeof block.code === 'object') {
+      Object.keys(block.code).forEach(lang => languages.add(lang));
+    } else {
+      languages.add(block.language);
+    }
+  });
+
+  return {
+    totalBlocks: document.blocks?.length || 0,
+    estimatedReadingTime: Math.ceil((document.blocks?.length || 0) * 2), // 2 minutes per block
+    languages: Array.from(languages)
+  };
+}
+
+function createS3Document(title: string, author: string): any {
+  return {
+    instructions: `# ${title}\n\nWelcome to your new Software 3 document!\n\nThis simplified format combines instructions and code in a clean, Jupyter-like interface.\n\n## Getting Started\n\n1. Edit these instructions (markdown format)\n2. Click the code icon (<>) to view/edit the code\n3. Toggle between views as needed\n\n**Author:** ${author}\n**Created:** ${new Date().toISOString().split('T')[0]}`,
+    code: `// Welcome to Software 3!\nconsole.log('Hello, Software 3!');\n\n// This is your code area\nfunction greet(name) {\n  return \`Welcome to Software 3, \${name}!\`;\n}\n\n// Test the function\nconst message = greet('${author}');\nconsole.log(message);`
+  };
+}
+
+export function deactivate() {
+  if (outputChannel) {
+    outputChannel.dispose();
+  }
+} 

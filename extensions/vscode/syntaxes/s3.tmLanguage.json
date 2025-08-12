@@ -1,0 +1,290 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Software3",
+  "scopeName": "source.s3",
+  "fileTypes": ["s3"],
+  "patterns": [
+    {
+      "include": "#s3-document"
+    }
+  ],
+  "repository": {
+    "s3-document": {
+      "patterns": [
+        {
+          "include": "#comments"
+        },
+        {
+          "begin": "\\{",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.section.braces.begin.s3"
+            }
+          },
+          "end": "\\}",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.section.braces.end.s3"
+            }
+          },
+          "name": "meta.object.s3",
+          "patterns": [
+            {
+              "include": "#instructions-field"
+            },
+            {
+              "include": "#code-field"
+            },
+            {
+              "include": "#property"
+            },
+            {
+              "include": "#comments"
+            }
+          ]
+        }
+      ]
+    },
+    "instructions-field": {
+      "begin": "(\")(instructions)(\")(\\s*:\\s*)(\")",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.property.begin.s3"
+        },
+        "2": {
+          "name": "keyword.key.instructions.s3 support.type.property-name.s3"
+        },
+        "3": {
+          "name": "punctuation.definition.property.end.s3"
+        },
+        "4": {
+          "name": "punctuation.separator.key-value.s3"
+        },
+        "5": {
+          "name": "punctuation.definition.string.begin.s3"
+        }
+      },
+      "end": "(\")(?:\\s*(,))?",
+      "endCaptures": {
+        "1": {
+          "name": "punctuation.definition.string.end.s3"
+        },
+        "2": {
+          "name": "punctuation.separator.comma.s3"
+        }
+      },
+      "name": "meta.property.instructions.s3",
+      "contentName": "meta.embedded.block.s3-instructions",
+      "patterns": [
+        {
+          "include": "#string-escape"
+        }
+      ]
+    },
+    "code-field": {
+      "patterns": [
+        {
+          "comment": "JavaScript code field",
+          "begin": "(\")(code)(\")(\\s*:\\s*)(\")",
+          "beginCaptures": {
+            "1": {
+              "name": "punctuation.definition.property.begin.s3"
+            },
+            "2": {
+              "name": "keyword.key.code.s3 support.type.property-name.s3"
+            },
+            "3": {
+              "name": "punctuation.definition.property.end.s3"
+            },
+            "4": {
+              "name": "punctuation.separator.key-value.s3"
+            },
+            "5": {
+              "name": "punctuation.definition.string.begin.s3"
+            }
+          },
+          "end": "(\")(?:\\s*(,))?",
+          "endCaptures": {
+            "1": {
+              "name": "punctuation.definition.string.end.s3"
+            },
+            "2": {
+              "name": "punctuation.separator.comma.s3"
+            }
+          },
+          "name": "meta.property.code.s3",
+          "contentName": "meta.embedded.block.s3-code-javascript",
+          "patterns": [
+            {
+              "include": "#detect-python"
+            },
+            {
+              "include": "#string-escape"
+            }
+          ]
+        }
+      ]
+    },
+    "detect-python": {
+      "comment": "Detect Python code and switch content name",
+      "match": "(?=.*(?:def\\s|import\\s|from\\s|class\\s|print\\(|if\\s__name__))",
+      "name": "meta.embedded.block.s3-code-python"
+    },
+    "property": {
+      "begin": "(\")(\\w+)(\")(\\s*:\\s*)",
+      "beginCaptures": {
+        "1": {
+          "name": "punctuation.definition.property.begin.s3"
+        },
+        "2": {
+          "name": "variable.other.property.s3"
+        },
+        "3": {
+          "name": "punctuation.definition.property.end.s3"
+        },
+        "4": {
+          "name": "punctuation.separator.key-value.s3"
+        }
+      },
+      "end": "(?=,|\\})",
+      "name": "meta.property.s3",
+      "patterns": [
+        {
+          "include": "#value"
+        }
+      ]
+    },
+    "value": {
+      "patterns": [
+        {
+          "include": "#string"
+        },
+        {
+          "include": "#number"
+        },
+        {
+          "include": "#boolean"
+        },
+        {
+          "include": "#null"
+        },
+        {
+          "include": "#object"
+        },
+        {
+          "include": "#array"
+        }
+      ]
+    },
+    "string": {
+      "begin": "\"",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.s3"
+        }
+      },
+      "end": "\"",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.s3"
+        }
+      },
+      "name": "string.quoted.double.s3",
+      "patterns": [
+        {
+          "include": "#string-escape"
+        }
+      ]
+    },
+    "string-escape": {
+      "patterns": [
+        {
+          "match": "\\\\(?:[\"\\\\/bfnrt]|u[0-9a-fA-F]{4})",
+          "name": "constant.character.escape.s3"
+        }
+      ]
+    },
+    "object": {
+      "begin": "\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.begin.s3"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.braces.end.s3"
+        }
+      },
+      "name": "meta.object.s3",
+      "patterns": [
+        {
+          "include": "#property"
+        },
+        {
+          "include": "#comments"
+        }
+      ]
+    },
+    "array": {
+      "begin": "\\[",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.section.brackets.begin.s3"
+        }
+      },
+      "end": "\\]",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.brackets.end.s3"
+        }
+      },
+      "name": "meta.array.s3",
+      "patterns": [
+        {
+          "include": "#value"
+        },
+        {
+          "match": ",",
+          "name": "punctuation.separator.comma.s3"
+        }
+      ]
+    },
+    "number": {
+      "match": "-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?",
+      "name": "constant.numeric.s3"
+    },
+    "boolean": {
+      "match": "\\b(true|false)\\b",
+      "name": "constant.language.boolean.s3"
+    },
+    "null": {
+      "match": "\\bnull\\b",
+      "name": "constant.language.null.s3"
+    },
+    "comments": {
+      "patterns": [
+        {
+          "begin": "/\\*",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.begin.s3"
+            }
+          },
+          "end": "\\*/",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.comment.end.s3"
+            }
+          },
+          "name": "comment.block.s3"
+        },
+        {
+          "match": "//.*$",
+          "name": "comment.line.double-slash.s3"
+        }
+      ]
+    }
+  }
+}

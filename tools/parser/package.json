@@ -1,0 +1,50 @@
+{
+  "name": "@software3/parser",
+  "version": "1.0.0",
+  "description": "Core parser library for Software 3 (.s3) file format",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/**/*",
+    "schema.json",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "echo \"Tests not implemented yet\"",
+    "lint": "echo \"Linting not configured yet\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "software3",
+    "s3",
+    "documentation",
+    "parser",
+    "markdown",
+    "code",
+    "dual-view",
+    "literate-programming"
+  ],
+  "author": "Software 3 Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/software3-format/parser.git"
+  },
+  "bugs": {
+    "url": "https://github.com/software3-format/parser/issues"
+  },
+  "homepage": "https://github.com/software3-format/parser#readme",
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+} 

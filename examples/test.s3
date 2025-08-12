@@ -1,0 +1,4 @@
+{
+  "instructions": "# New Document\n\nWelcome to your new Software 3 document!\n\nThis simplified format combines instructions and code in a clean, Jupyter-like interface.\n\n## Getting Started\n\n1. Edit these instructions (markdown format)\n2. Click the code icon (<>) to view/edit the code\n3. Toggle between views as needed\n\n**Author:** Author\n**Created:** 2025-08-08",
+  "code": "// Welcome to Software 3!\nconsole.log('Hello, Software 3!');\n\n// This is your code area\nfunction greet(name) {\n  return `Welcome to Software 3, ${name}!`;\n}\n\n// Test the function\nconst message = greet('Author');\nconsole.log(message);"
+}

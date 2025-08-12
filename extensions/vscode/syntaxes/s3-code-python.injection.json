@@ -1,0 +1,9 @@
+{
+  "scopeName": "s3.code.python.injection",
+  "injectionSelector": "L:meta.embedded.block.s3-code-python",
+  "patterns": [
+    {
+      "include": "source.python"
+    }
+  ]
+}

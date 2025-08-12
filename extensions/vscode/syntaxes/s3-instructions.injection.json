@@ -1,0 +1,9 @@
+{
+  "scopeName": "s3.instructions.injection",
+  "injectionSelector": "L:meta.embedded.block.s3-instructions",
+  "patterns": [
+    {
+      "include": "text.html.markdown"
+    }
+  ]
+}
