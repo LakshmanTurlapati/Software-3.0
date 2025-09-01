@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Debug Test</title>
+    <style>
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .button-group {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            display: flex;
+            gap: 8px;
+            z-index: 100;
+        }
+        button {
+            height: 32px;
+            width: 100px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #005a9e;
+        }
+        .test-area {
+            margin-top: 100px;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <div class="button-group">
+        <button id="play-button" onclick="console.log('Play clicked via onclick')">Play</button>
+        <button id="toggle-button" onclick="console.log('Toggle clicked via onclick')">Toggle</button>
+    </div>
+    
+    <div class="test-area">
+        <h2>Button Click Test</h2>
+        <p>Testing if buttons respond to clicks...</p>
+        
+        <button onclick="testDirectClick()">Test Direct Click</button>
+        <button id="test-listener">Test addEventListener</button>
+    </div>
+    
+    <script>
+        console.log('=== TEST PAGE LOADED ===');
+        
+        // Test direct function
+        function testDirectClick() {
+            console.log('✅ Direct onclick works!');
+        }
+        
+        // Test addEventListener
+        document.getElementById('test-listener').addEventListener('click', function() {
+            console.log('✅ addEventListener works!');
+        });
+        
+        // Test our actual buttons
+        document.getElementById('toggle-button').addEventListener('click', function(e) {
+            console.log('✅ Toggle button clicked via addEventListener!', e);
+        });
+        
+        document.getElementById('play-button').addEventListener('click', function(e) {
+            console.log('✅ Play button clicked via addEventListener!', e);
+        });
+        
+        // Monitor all clicks
+        document.addEventListener('click', function(e) {
+            console.log('Document click:', e.target.id || e.target.tagName);
+        });
+    </script>
+    
+    <!-- Load the debug script -->
+    <script src="media/debug-webview.js"></script>
+</body>
+</html>

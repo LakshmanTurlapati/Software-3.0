@@ -211,11 +211,21 @@ Languages: ${stats.languages.join(', ')}`;
     });
     // Auto-populate empty .s3 files when opened
     const onDidOpenTextDocument = vscode.workspace.onDidOpenTextDocument(async (document) => {
-        if (document.fileName.endsWith('.s3') && document.getText().trim() === '') {
-            const templateContent = JSON.stringify(createS3Document('New Document', 'Author'), null, 2);
-            const edit = new vscode.WorkspaceEdit();
-            edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), templateContent);
-            await vscode.workspace.applyEdit(edit);
+        if (document.fileName.endsWith('.s3')) {
+            const content = document.getText().trim();
+            // Handle completely empty files
+            if (content === '') {
+                const defaultStructure = {
+                    instructions: '',
+                    code: '',
+                    language: ''
+                };
+                const templateContent = JSON.stringify(defaultStructure, null, 2);
+                const edit = new vscode.WorkspaceEdit();
+                edit.replace(document.uri, new vscode.Range(0, 0, document.lineCount, 0), templateContent);
+                await vscode.workspace.applyEdit(edit);
+                outputChannel.appendLine(`Initialized empty S3 file: ${document.fileName}`);
+            }
         }
     });
     // Register all commands and event handlers
@@ -225,44 +235,92 @@ Languages: ${stats.languages.join(', ')}`;
 function detectLanguage(code) {
     try {
         // Simple pattern-based language detection - no external dependencies
-        // Check for specific language patterns
+        // Python detection
         if (code.includes('def ') || code.includes('import ') && code.includes('from ') ||
-            code.includes('print(') || /^\s*#[^{]/.test(code)) {
+            code.includes('print(') || /^\s*#[^{]/.test(code) || code.includes('__init__') ||
+            code.includes('self.') || code.includes('async def') || code.includes('await ')) {
             return 'python';
         }
-        if (code.includes('function ') || code.includes('const ') || code.includes('let ') ||
-            code.includes('console.log') || code.includes('=>') || code.includes('typeof')) {
-            return 'javascript';
-        }
+        // TypeScript detection (before JavaScript as it's a superset)
         if (code.includes('interface ') || code.includes(': string') || code.includes(': number') ||
-            code.includes('export ') || code.includes('import type')) {
+            code.includes('export ') || code.includes('import type') || code.includes('enum ') ||
+            code.includes(': boolean') || code.includes('<T>') || code.includes('as ')) {
             return 'typescript';
         }
-        if (code.includes('public class') || code.includes('private ') || code.includes('System.out') ||
-            code.includes('public static void main')) {
-            return 'java';
+        // JavaScript detection
+        if (code.includes('function ') || code.includes('const ') || code.includes('let ') ||
+            code.includes('console.log') || code.includes('=>') || code.includes('typeof') ||
+            code.includes('require(') || code.includes('module.exports')) {
+            return 'javascript';
         }
-        if (code.includes('package main') || code.includes('func ') || code.includes('fmt.Print')) {
-            return 'go';
-        }
-        if (code.includes('fn ') || code.includes('println!') || code.includes('let mut ')) {
-            return 'rust';
-        }
-        if (code.includes('<?php') || code.includes('echo ') || code.includes('$')) {
-            return 'php';
-        }
-        if (code.includes('class ') && (code.includes('def ') || code.includes('end'))) {
-            return 'ruby';
-        }
-        if (code.includes('#include') || code.includes('std::') || code.includes('cout')) {
-            return 'cpp';
-        }
-        if (code.includes('using ') || code.includes('Console.Write')) {
-            return 'csharp';
-        }
-        if (code.includes('<html') || code.includes('<div') || code.includes('</')) {
+        // HTML detection
+        if (code.includes('<!DOCTYPE') || code.includes('<html') || code.includes('<head>') ||
+            code.includes('<body>') || code.includes('<div') || code.includes('</')) {
             return 'html';
         }
+        // CSS detection
+        if ((code.includes('{') && code.includes('}') && code.includes(':') && code.includes(';')) &&
+            (code.includes('color:') || code.includes('background') || code.includes('margin') ||
+                code.includes('padding') || code.includes('display:') || code.includes('.') || code.includes('#'))) {
+            return 'css';
+        }
+        // Go detection
+        if (code.includes('package main') || code.includes('func ') || code.includes('fmt.Print') ||
+            code.includes('go ') || code.includes('import (')) {
+            return 'go';
+        }
+        // Rust detection
+        if (code.includes('fn ') || code.includes('println!') || code.includes('let mut ') ||
+            code.includes('impl ') || code.includes('pub ') || code.includes('match ') ||
+            code.includes('Result<')) {
+            return 'rust';
+        }
+        // Java detection
+        if (code.includes('public class') || code.includes('private ') || code.includes('System.out') ||
+            code.includes('public static void main') || code.includes('protected ')) {
+            return 'java';
+        }
+        // C++ detection
+        if (code.includes('std::') || code.includes('cout') || code.includes('namespace ') ||
+            code.includes('#include <iostream>') || code.includes('template<')) {
+            return 'cpp';
+        }
+        // C detection
+        if (code.includes('#include') || code.includes('int main') || code.includes('void ') ||
+            code.includes('printf(') || code.includes('scanf(')) {
+            return 'c';
+        }
+        // C# detection
+        if (code.includes('using ') || code.includes('Console.Write') || code.includes('namespace ') ||
+            code.includes('public class')) {
+            return 'csharp';
+        }
+        // PHP detection
+        if (code.includes('<?php') || code.includes('echo ') || code.includes('$_') ||
+            code.includes('function ') && code.includes('$')) {
+            return 'php';
+        }
+        // Ruby detection
+        if (code.includes('class ') && (code.includes('def ') || code.includes('end')) ||
+            code.includes('puts ') || code.includes('@')) {
+            return 'ruby';
+        }
+        // SQL detection
+        if (code.includes('SELECT ') || code.includes('FROM ') || code.includes('WHERE ') ||
+            code.includes('INSERT INTO') || code.includes('UPDATE ') || code.includes('DELETE FROM')) {
+            return 'sql';
+        }
+        // Shell/Bash detection
+        if (code.includes('#!/bin/bash') || code.includes('echo ') || code.includes('if [') ||
+            code.includes('then') || code.includes('fi') || code.includes('$1')) {
+            return 'bash';
+        }
+        // YAML detection
+        if (!code.includes('{') && (code.includes(':') && code.includes('\n') &&
+            (code.includes('  -') || code.includes('- ')))) {
+            return 'yaml';
+        }
+        // JSON detection
         if (code.includes('{') && code.includes('}') && (code.includes(':') || code.includes('"'))) {
             // Check for JSON pattern
             try {
@@ -422,8 +480,9 @@ function generateStats(document) {
 }
 function createS3Document(title, author) {
     return {
-        instructions: `# ${title}\n\nWelcome to your new Software 3 document!\n\nThis simplified format combines instructions and code in a clean, Jupyter-like interface.\n\n## Getting Started\n\n1. Edit these instructions (markdown format)\n2. Click the code icon (<>) to view/edit the code\n3. Toggle between views as needed\n\n**Author:** ${author}\n**Created:** ${new Date().toISOString().split('T')[0]}`,
-        code: `// Welcome to Software 3!\nconsole.log('Hello, Software 3!');\n\n// This is your code area\nfunction greet(name) {\n  return \`Welcome to Software 3, \${name}!\`;\n}\n\n// Test the function\nconst message = greet('${author}');\nconsole.log(message);`
+        instructions: '',
+        code: '',
+        language: ''
     };
 }
 function deactivate() {

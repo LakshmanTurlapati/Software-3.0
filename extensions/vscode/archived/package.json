@@ -1,8 +1,8 @@
 {
-  "name": "software3-enhanced",
-  "displayName": "Software3 Enhanced",
+  "name": "software3",
+  "displayName": "Software 3.0",
   "description": "Enhanced language support for Software 3 (.s3) files with FontAwesome icons, automatic language detection, and VS Code-style syntax highlighting",
-  "version": "1.2.1",
+  "version": "1.5.1",
   "publisher": "lakshman-turlapati",
   "engines": {
     "vscode": "^1.74.0"

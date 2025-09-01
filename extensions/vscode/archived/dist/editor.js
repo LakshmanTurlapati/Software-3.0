@@ -35,8 +35,10 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.S3DocumentEditor = void 0;
 const vscode = __importStar(require("vscode"));
+const editor_simple_editable_1 = require("./editor-simple-editable");
+const executionHandler_1 = require("./executionHandler");
 /**
- * Simplified Custom Document for S3 files
+ * Custom Document for S3 files with editing support
  */
 class S3CustomDocument extends vscode.Disposable {
     static async create(uri, backupId) {
@@ -48,6 +50,12 @@ class S3CustomDocument extends vscode.Disposable {
         super(() => {
             // Cleanup resources
         });
+        this._edits = [];
+        this._savedEdits = [];
+        this._onDidChange = new vscode.EventEmitter();
+        this.onDidChange = this._onDidChange.event;
+        this._onDidChangeDocument = new vscode.EventEmitter();
+        this.onDidChangeDocument = this._onDidChangeDocument.event;
         this._onDidDispose = new vscode.EventEmitter();
         this.onDidDispose = this._onDidDispose.event;
         this._uri = uri;
@@ -55,14 +63,111 @@ class S3CustomDocument extends vscode.Disposable {
     }
     get uri() { return this._uri; }
     get documentData() { return this._documentData; }
+    get isDirty() {
+        return this._edits.length > this._savedEdits.length;
+    }
     dispose() {
         this._onDidDispose.fire();
+        this._onDidChange.dispose();
+        this._onDidChangeDocument.dispose();
         super.dispose();
+    }
+    /**
+     * Apply an edit to the document
+     */
+    makeEdit(edit) {
+        this._edits.push(edit);
+        // Apply the edit to document data
+        const s3Doc = this.getS3Document();
+        if (edit.type === 'instructions') {
+            s3Doc.instructions = edit.content;
+        }
+        else if (edit.type === 'code') {
+            s3Doc.code = edit.content;
+        }
+        else if (edit.type === 'language') {
+            s3Doc.language = edit.content;
+        }
+        const newData = new TextEncoder().encode(JSON.stringify(s3Doc, null, 2));
+        this._documentData = newData;
+        this._onDidChange.fire({
+            label: `Edit ${edit.type}`,
+            undo: () => {
+                // Remove the last edit and revert
+                this._edits.pop();
+                this.revertToEdits();
+            },
+            redo: () => {
+                // Re-apply the edit
+                this._edits.push(edit);
+                this.revertToEdits();
+            }
+        });
+        this._onDidChangeDocument.fire({
+            content: this._documentData,
+            edits: this._edits
+        });
+    }
+    /**
+     * Save the document
+     */
+    save() {
+        this._savedEdits = [...this._edits];
+    }
+    /**
+     * Revert all unsaved changes
+     */
+    revert() {
+        this._edits = [...this._savedEdits];
+        this.revertToEdits();
+    }
+    /**
+     * Get the current S3 document content
+     */
+    getS3Document() {
+        const decoder = new TextDecoder();
+        const textContent = decoder.decode(this._documentData);
+        try {
+            return JSON.parse(textContent);
+        }
+        catch {
+            // Return default document if parsing fails
+            return { instructions: '', code: '', language: '' };
+        }
+    }
+    revertToEdits() {
+        // Rebuild document from base + edits
+        const decoder = new TextDecoder();
+        const baseContent = decoder.decode(this._documentData);
+        let s3Doc;
+        try {
+            s3Doc = JSON.parse(baseContent);
+        }
+        catch {
+            s3Doc = { instructions: '', code: '', language: '' };
+        }
+        // Apply all saved edits
+        for (const edit of this._edits) {
+            if (edit.type === 'instructions') {
+                s3Doc.instructions = edit.content;
+            }
+            else if (edit.type === 'code') {
+                s3Doc.code = edit.content;
+            }
+            else if (edit.type === 'language') {
+                s3Doc.language = edit.content;
+            }
+        }
+        this._documentData = new TextEncoder().encode(JSON.stringify(s3Doc, null, 2));
+        this._onDidChangeDocument.fire({
+            content: this._documentData,
+            edits: this._edits
+        });
     }
 }
 /**
- * Simplified Custom Editor Provider for Software 3 (.s3) files
- * Jupyter-like interface with instructions/code toggle
+ * Custom Editor Provider for Software 3 (.s3) files
+ * Jupyter-like interface with instructions/code editing
  */
 class S3DocumentEditor {
     static register(context) {
@@ -77,6 +182,51 @@ class S3DocumentEditor {
     }
     constructor(context) {
         this.context = context;
+        this._onDidChangeCustomDocument = new vscode.EventEmitter();
+        this.onDidChangeCustomDocument = this._onDidChangeCustomDocument.event;
+        this.executionHandler = new executionHandler_1.ExecutionHandler(context);
+    }
+    /**
+     * Save a custom document.
+     */
+    async saveCustomDocument(document, cancellation) {
+        await this.saveDocument(document);
+    }
+    /**
+     * Save a custom document to a new location.
+     */
+    async saveCustomDocumentAs(document, destination, cancellation) {
+        await this.saveDocumentAs(document, destination);
+    }
+    /**
+     * Revert a custom document to its last saved state.
+     */
+    async revertCustomDocument(document, cancellation) {
+        document.revert();
+    }
+    /**
+     * Back up a custom document.
+     */
+    async backupCustomDocument(document, context, cancellation) {
+        return {
+            id: context.destination.toString(),
+            delete: async () => {
+                try {
+                    await vscode.workspace.fs.delete(context.destination);
+                }
+                catch {
+                    // Ignore errors
+                }
+            }
+        };
+    }
+    async saveDocument(document) {
+        await vscode.workspace.fs.writeFile(document.uri, document.documentData);
+        document.save();
+    }
+    async saveDocumentAs(document, destination) {
+        await vscode.workspace.fs.writeFile(destination, document.documentData);
+        document.save();
     }
     /**
      * If the code comes in fenced form ```lang\n...```, extract language and raw code
@@ -125,25 +275,30 @@ class S3DocumentEditor {
     async renderCodeWithVSCode(code, language) {
         const config = vscode.workspace.getConfiguration('software3');
         const engine = config.get('syntaxHighlighting.engine', 'vscode');
+        // Format HTML code for better readability
+        let codeToRender = code;
+        if (language === 'html' || language === 'htm') {
+            codeToRender = this.formatHtmlCode(code);
+        }
         // Try multiple highlighting approaches for reliability
         const engines = ['hljs', 'inline', 'vscode', 'basic'];
         for (const currentEngine of engines) {
             try {
                 switch (currentEngine) {
                     case 'hljs':
-                        const hljsResult = this.renderWithHighlightJS(code, language);
+                        const hljsResult = this.renderWithHighlightJS(codeToRender, language);
                         return hljsResult;
                     case 'vscode':
-                        const vsCodeResult = await this.renderWithVSCodeAPI(code, language);
+                        const vsCodeResult = await this.renderWithVSCodeAPI(codeToRender, language);
                         if (vsCodeResult) {
                             return vsCodeResult;
                         }
                         break;
                     case 'inline':
-                        const inlineResult = this.renderWithInlineStyles(code, language);
+                        const inlineResult = this.renderWithInlineStyles(codeToRender, language);
                         return inlineResult;
                     case 'basic':
-                        const basicResult = this.renderBasicHighlighting(code, language);
+                        const basicResult = this.renderBasicHighlighting(codeToRender, language);
                         return basicResult;
                 }
             }
@@ -264,14 +419,14 @@ class S3DocumentEditor {
     renderWithInlineStyles(code, language) {
         // Detect theme (light/dark) based on VS Code context
         const isDark = vscode.window.activeColorTheme?.kind === vscode.ColorThemeKind.Dark;
-        // Define DEBUG color schemes - EXTREMELY BRIGHT COLORS FOR TESTING
+        // Define color schemes - using transparent for elements that were orange
         const colors = isDark ? {
             keyword: '#FF00FF', // Bright magenta
             string: '#00FF00', // Bright green
             comment: '#FFFF00', // Bright yellow
             number: '#FF0000', // Bright red
             function: '#00FFFF', // Bright cyan
-            property: '#FFA500', // Bright orange
+            property: 'transparent', // Changed from orange to transparent
             decorator: '#FF69B4', // Hot pink
             builtin: '#9370DB', // Medium purple
             operator: '#FFFFFF', // White
@@ -281,7 +436,7 @@ class S3DocumentEditor {
             string: '#008000', // Green
             comment: '#FF0000', // Red
             number: '#0000FF', // Blue
-            function: '#FFA500', // Orange
+            function: 'transparent', // Changed from orange to transparent
             property: '#800080', // Purple
             decorator: '#FF1493', // Deep pink
             builtin: '#2E8B57', // Sea green
@@ -708,6 +863,7 @@ class S3DocumentEditor {
                 enableScripts: true,
                 localResourceRoots: [
                     this.context.extensionUri,
+                    vscode.Uri.joinPath(this.context.extensionUri, 'media'),
                     vscode.Uri.joinPath(this.context.extensionUri, 'media', 'fontawesome')
                 ]
             };
@@ -728,10 +884,8 @@ class S3DocumentEditor {
             // Set initial content
             await updateWebview();
             // Listen for document changes (for live updates)
-            const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
-                if (e.document.uri.toString() === document.uri.toString()) {
-                    updateWebview();
-                }
+            const changeDocumentSubscription = document.onDidChangeDocument(() => {
+                updateWebview();
             });
             // Refresh when the active color theme changes to keep colors in sync
             const themeChangeSubscription = vscode.window.onDidChangeActiveColorTheme(() => {
@@ -741,9 +895,11 @@ class S3DocumentEditor {
             webviewPanel.onDidDispose(() => {
                 changeDocumentSubscription.dispose();
                 themeChangeSubscription.dispose();
+                // Clean up any running executions
+                this.executionHandler.stopExecution(webviewPanel.webview.toString());
             });
             // Handle messages from webview
-            webviewPanel.webview.onDidReceiveMessage(e => {
+            webviewPanel.webview.onDidReceiveMessage(async (e) => {
                 switch (e.type) {
                     case 'copy':
                         vscode.env.clipboard.writeText(e.text);
@@ -752,6 +908,66 @@ class S3DocumentEditor {
                     case 'openExternal':
                         if (e.url) {
                             vscode.env.openExternal(vscode.Uri.parse(e.url));
+                        }
+                        return;
+                    case 'edit':
+                        // Handle edit from webview
+                        if (e.editType && e.content !== undefined) {
+                            const edit = {
+                                type: e.editType,
+                                content: e.content,
+                                timestamp: Date.now()
+                            };
+                            document.makeEdit(edit);
+                            // Fire the change event for VS Code
+                            this._onDidChangeCustomDocument.fire({
+                                document,
+                                undo: () => document.revert(),
+                                redo: () => document.makeEdit(edit),
+                                label: `Edit ${edit.type}`
+                            });
+                        }
+                        return;
+                    case 'save':
+                        // Handle save request from webview
+                        try {
+                            await this.saveDocument(document);
+                            webviewPanel.webview.postMessage({ type: 'saved' });
+                        }
+                        catch (error) {
+                            vscode.window.showErrorMessage(`Failed to save: ${error}`);
+                        }
+                        return;
+                    case 'execute':
+                        // Handle code execution request
+                        console.log('[S3Editor] Execute request received');
+                        if (e.code && e.language) {
+                            try {
+                                await this.executionHandler.execute(e.code, e.language, webviewPanel);
+                            }
+                            catch (error) {
+                                console.error('[S3Editor] Execution error:', error);
+                                webviewPanel.webview.postMessage({
+                                    type: 'execution-error',
+                                    error: error.message || 'Execution failed'
+                                });
+                            }
+                        }
+                        return;
+                    case 'stop-execution':
+                        // Handle stop execution request
+                        console.log('[S3Editor] Stop execution request received');
+                        try {
+                            await this.executionHandler.stopExecution(webviewPanel.webview.toString());
+                            webviewPanel.webview.postMessage({
+                                type: 'output',
+                                text: 'Execution stopped.',
+                                outputType: 'info'
+                            });
+                            webviewPanel.webview.postMessage({ type: 'execution-complete' });
+                        }
+                        catch (error) {
+                            console.error('[S3Editor] Error stopping execution:', error);
                         }
                         return;
                 }
@@ -775,7 +991,7 @@ class S3DocumentEditor {
             console.log('[S3Editor] Document content decoded, length:', textContent.length);
             if (!textContent || textContent.trim() === '') {
                 console.log('[S3Editor] Document is empty, creating template');
-                return await this.getTemplateDocumentHtml();
+                return await this.getTemplateDocumentHtml(webview);
             }
             const s3Document = JSON.parse(textContent);
             console.log('[S3Editor] Document parsed successfully');
@@ -794,442 +1010,82 @@ class S3DocumentEditor {
         const instructionsHtml = await this.renderMarkdownWithVSCode(document.instructions);
         // Allow fenced code inside the raw .s3 `code` field to specify language explicitly
         const { language: fencedLang, code: rawCode } = this.extractFencedCode(document.code);
-        const detectedLanguage = fencedLang || this.detectLanguage(rawCode);
+        // Use document.language first, then fenced language, then detect
+        const detectedLanguage = document.language || fencedLang || this.detectLanguage(rawCode);
         const codeHtml = await this.renderCodeWithVSCode(rawCode, detectedLanguage);
         // Get local FontAwesome CSS URI
         const fontAwesomeUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'fontawesome', 'css', 'all.min.css'));
+        // Get JavaScript file URI
+        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'media', 'webview.js'));
+        return (0, editor_simple_editable_1.generateSimpleEditableHTML)(document, webview, fontAwesomeUri, instructionsHtml, codeHtml, detectedLanguage, scriptUri);
+    }
+    async getTemplateDocumentHtml(webview) {
+        const templateDocument = {
+            instructions: "",
+            code: "",
+            language: ""
+        };
+        if (!webview) {
+            // Return a simple HTML template without webview-specific resources
+            return this.getSimpleTemplateHtml(templateDocument);
+        }
+        return await this.generateSimpleView(templateDocument, webview);
+    }
+    getSimpleTemplateHtml(document) {
         return `<!DOCTYPE html>
     <html lang="en">
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com; script-src ${webview.cspSource} 'unsafe-inline' https://cdnjs.cloudflare.com; font-src ${webview.cspSource}; img-src ${webview.cspSource} data:;">
         <title>Software 3 Document</title>
-        <link rel="stylesheet" href="${fontAwesomeUri}">
-        <!-- DEBUG: Try Highlight.js as alternative -->
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
         <style>
           body {
-            padding: 20px;
-            line-height: 1.6;
             font-family: var(--vscode-font-family, 'Segoe UI', system-ui, sans-serif);
-            font-size: var(--vscode-font-size, 14px);
             color: var(--vscode-foreground);
             background-color: var(--vscode-editor-background);
+            padding: 20px;
             max-width: 900px;
             margin: 0 auto;
           }
-          
-          .s3-container {
+          .container {
             border: 1px solid var(--vscode-panel-border);
             border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            position: relative;
-          }
-          
-          .code-icon {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            width: 32px;
-            height: 32px;
-            background: var(--vscode-button-background);
-            color: var(--vscode-button-foreground);
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            z-index: 10;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-          }
-          
-          .code-icon:hover {
-            background: var(--vscode-button-hoverBackground);
-          }
-          
-          .instructions-view {
-            padding: 50px 25px 25px 25px;
-            background: var(--vscode-editor-background);
-          }
-          
-          .code-view {
-            padding: 50px 25px 25px 25px;
-            background: var(--vscode-editor-background);
-            display: none;
-          }
-          
-          .code-view pre {
-            margin: 0;
-            background: transparent !important;
-            overflow-x: auto;
-            font-family: var(--vscode-editor-font-family, 'Consolas', 'Monaco', 'Courier New', monospace);
-            font-size: var(--vscode-editor-font-size, 14px);
-            line-height: 1.5;
-            border-radius: 6px;
-          }
-          
-          .code-view code {
-            background: transparent !important;
-            font-family: inherit;
-          }
-          
-          /* Theme-aware token colors using chart palette for strong contrast in webviews */
-          /* Legacy token classes for backwards compatibility */
-          .token-keyword {
-            color: var(--vscode-charts-purple, #c586c0);
-            font-weight: 600;
-          }
-          .token-string {
-            color: var(--vscode-charts-green, #ce9178);
-          }
-          .token-comment {
-            color: var(--vscode-descriptionForeground);
-            font-style: italic;
-            opacity: 0.85;
-          }
-          .token-number {
-            color: var(--vscode-charts-orange, #d19a66);
-          }
-          .token-function {
-            color: var(--vscode-charts-blue, #61afef);
-          }
-          .token-property {
-            color: var(--vscode-charts-yellow, #e5c07b);
-          }
-          .token-decorator {
-            color: var(--vscode-charts-red, #e06c75);
-            font-weight: 600;
-          }
-          .token-selector {
-            color: var(--vscode-charts-blue, #61afef);
-          }
-          .token-value {
-            color: var(--vscode-charts-green, #98c379);
-          }
-          
-          /* Prism.js-style token classes for enhanced highlighting */
-          .token.keyword {
-            color: var(--vscode-charts-purple, #c586c0);
-            font-weight: 600;
-          }
-          .token.string, .token.template-string {
-            color: var(--vscode-charts-green, #ce9178);
-          }
-          .token.comment {
-            color: var(--vscode-descriptionForeground);
-            font-style: italic;
-            opacity: 0.85;
-          }
-          .token.number {
-            color: var(--vscode-charts-orange, #d19a66);
-          }
-          .token.function {
-            color: var(--vscode-charts-blue, #61afef);
-          }
-          .token.property {
-            color: var(--vscode-charts-yellow, #e5c07b);
-          }
-          .token.decorator, .token.macro {
-            color: var(--vscode-charts-red, #e06c75);
-            font-weight: 600;
-          }
-          .token.builtin {
-            color: var(--vscode-charts-cyan, #56b6c2);
-            font-weight: 500;
-          }
-          .token.operator {
-            color: var(--vscode-symbolIcon-operatorForeground, #569cd6);
-          }
-          .token.punctuation {
-            color: var(--vscode-foreground);
-            opacity: 0.7;
-          }
-          .token.selector {
-            color: var(--vscode-charts-blue, #61afef);
-          }
-          .token.value {
-            color: var(--vscode-charts-green, #98c379);
-          }
-          
-          /* Theme-aware code block styling */
-          .code-view {
-            background: var(--vscode-editor-background);
-            border: 1px solid var(--vscode-panel-border);
-            border-radius: 4px;
-          }
-          
-          /* Enhanced Markdown Styling with VS Code Theme Integration */
-          
-          /* Markdown Headers */
-          .markdown-h1, .markdown-h2, .markdown-h3, h1, h2, h3, h4, h5, h6 {
-            color: var(--vscode-editor-foreground);
-            font-weight: 600;
-            line-height: 1.25;
-            margin-top: 24px;
-            margin-bottom: 16px;
-            border-bottom: none;
-          }
-          
-          .markdown-h1, h1 { 
-            font-size: 2em; 
-            border-bottom: 1px solid var(--vscode-panel-border);
-            padding-bottom: 8px;
-          }
-          .markdown-h2, h2 { 
-            font-size: 1.5em; 
-            border-bottom: 1px solid var(--vscode-panel-border);
-            padding-bottom: 4px;
-          }
-          .markdown-h3, h3 { font-size: 1.25em; }
-          
-          /* Markdown Paragraphs */
-          .markdown-paragraph, p {
-            margin-bottom: 16px;
-            line-height: 1.6;
-            color: var(--vscode-editor-foreground);
-          }
-          
-          /* Markdown Text Formatting */
-          .markdown-bold, strong { 
-            font-weight: 600; 
-            color: var(--vscode-editor-foreground);
-          }
-          .markdown-italic, em { 
-            font-style: italic; 
-            color: var(--vscode-editor-foreground);
-          }
-          
-          /* Markdown Code Elements */
-          /* Scope inline code styling to the instructions (markdown) area only */
-          .instructions-view .markdown-inline-code, .instructions-view code {
-            background: var(--vscode-textCodeBlock-background);
-            color: var(--vscode-textPreformat-foreground);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: var(--vscode-editor-font-family, 'Consolas', 'Monaco', 'Courier New', monospace);
-            font-size: 0.9em;
-            border: 1px solid var(--vscode-panel-border);
-          }
-          
-          /* Enhanced Code Blocks */
-          /* Scope fenced code block styling to instructions markdown only */
-          .instructions-view .markdown-code-block {
-            margin: 16px 0;
-            border: 1px solid var(--vscode-panel-border);
-            border-radius: 6px;
-            overflow: hidden;
-            background: var(--vscode-textCodeBlock-background);
-          }
-          
-          .instructions-view .code-block-header {
-            background: var(--vscode-sideBar-background);
-            border-bottom: 1px solid var(--vscode-panel-border);
-            padding: 8px 12px;
-            font-size: 0.8em;
-            color: var(--vscode-descriptionForeground);
-          }
-          
-          .instructions-view .code-block-language {
-            font-family: var(--vscode-editor-font-family, 'Consolas', 'Monaco', 'Courier New', monospace);
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          
-          .instructions-view .markdown-code-block pre {
-            margin: 0;
-            padding: 16px;
-            background: transparent;
-            overflow-x: auto;
-            font-family: var(--vscode-editor-font-family, 'Consolas', 'Monaco', 'Courier New', monospace);
-            font-size: var(--vscode-editor-font-size, 14px);
-            line-height: 1.45;
-          }
-          
-          .instructions-view .markdown-code-block code {
-            background: transparent;
-            border: none;
-            padding: 0;
-          }
-          
-          /* Markdown Lists */
-          .markdown-list, .markdown-ordered-list, ul, ol {
-            margin-bottom: 16px;
-            padding-left: 32px;
-            color: var(--vscode-editor-foreground);
-          }
-          
-          .markdown-list-item, .markdown-ordered-item, li {
-            margin-bottom: 4px;
-            line-height: 1.6;
-          }
-          
-          .markdown-list {
-            list-style-type: disc;
-          }
-          
-          .markdown-ordered-list {
-            list-style-type: decimal;
-          }
-          
-          /* Markdown Links */
-          .markdown-link, a {
-            color: var(--vscode-textLink-foreground);
-            text-decoration: none;
-            border-bottom: 1px solid transparent;
-            transition: all 0.2s ease;
-          }
-          
-          .markdown-link:hover, a:hover {
-            color: var(--vscode-textLink-activeForeground);
-            border-bottom-color: var(--vscode-textLink-foreground);
-          }
-          
-          /* Markdown Blockquotes */
-          .markdown-blockquote, blockquote {
-            margin: 16px 0;
-            padding: 8px 16px;
-            border-left: 4px solid var(--vscode-textLink-foreground);
-            background: var(--vscode-textCodeBlock-background);
-            color: var(--vscode-editor-foreground);
-            font-style: italic;
-            border-radius: 0 4px 4px 0;
-          }
-          
-          /* Tables (if VS Code API renders them) */
-          table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 16px 0;
-            background: var(--vscode-editor-background);
-          }
-          
-          th, td {
-            border: 1px solid var(--vscode-panel-border);
-            padding: 8px 12px;
-            text-align: left;
-          }
-          
-          th {
-            background: var(--vscode-sideBar-background);
-            font-weight: 600;
-            color: var(--vscode-editor-foreground);
-          }
-          
-          tr:nth-child(even) {
-            background: var(--vscode-list-hoverBackground);
-          }
-          
-          /* Horizontal Rules */
-          hr {
-            border: none;
-            border-top: 1px solid var(--vscode-panel-border);
-            margin: 24px 0;
-          }
-
-          .error-container {
-            background: var(--vscode-inputValidation-errorBackground);
-            border: 1px solid var(--vscode-inputValidation-errorBorder);
-            color: var(--vscode-inputValidation-errorForeground);
             padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
+            background: var(--vscode-editor-background);
+          }
+          h1 { color: var(--vscode-editor-foreground); }
+          code {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 2px 4px;
+            border-radius: 3px;
+          }
+          pre {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 12px;
+            border-radius: 4px;
+            overflow-x: auto;
           }
         </style>
     </head>
-    <body class="vscode-body" data-vscode-theme-kind="vscode-theme-kind">
-        <div class="s3-container">
-            <button class="code-icon" onclick="toggleView()" title="Toggle between instructions and code">
-                <i class="fas fa-code" id="toggle-icon"></i>
-            </button>
-            
-            <div class="instructions-view" id="instructions">
-                ${instructionsHtml}
-            </div>
-            
-            <div class="code-view" id="code">
-                ${codeHtml}
-            </div>
+    <body>
+        <div class="container">
+            <h1>Welcome to Software 3</h1>
+            <p>This is a new Software 3 document. The editor will load once the document is saved with content.</p>
+            <p>The S3 format includes:</p>
+            <ul>
+                <li><strong>instructions</strong> - Documentation in markdown format</li>
+                <li><strong>code</strong> - Your code implementation</li>
+                <li><strong>language</strong> - The programming language</li>
+            </ul>
+            <p>Example structure:</p>
+            <pre><code>{
+  "instructions": "Your documentation here",
+  "code": "Your code here",
+  "language": "javascript"
+}</code></pre>
         </div>
-        
-        <script>
-          let showingCode = false;
-          
-          function toggleView() {
-            const instructionsView = document.getElementById('instructions');
-            const codeView = document.getElementById('code');
-            const icon = document.getElementById('toggle-icon');
-            const button = document.querySelector('.code-icon');
-            
-            if (showingCode) {
-              // Show instructions
-              instructionsView.style.display = 'block';
-              codeView.style.display = 'none';
-              icon.className = 'fas fa-code';
-              button.title = 'View code';
-              showingCode = false;
-            } else {
-              // Show code
-              instructionsView.style.display = 'none';
-              codeView.style.display = 'block';
-              icon.className = 'fas fa-file-lines';
-              button.title = 'Back to instructions';
-              showingCode = true;
-            }
-          }
-          
-          // Initialize Highlight.js if available
-          if (typeof hljs !== 'undefined') {
-            hljs.highlightAll();
-            
-            // Force highlight any pre>code blocks
-            document.querySelectorAll('pre code').forEach((block) => {
-              hljs.highlightElement(block);
-            });
-          }
-          
-          // Theme detection and body class management for better VS Code integration
-          function detectTheme() {
-            // VS Code provides theme information through CSS variables
-            const styles = getComputedStyle(document.body);
-            const backgroundColor = styles.getPropertyValue('--vscode-editor-background');
-            const foregroundColor = styles.getPropertyValue('--vscode-foreground');
-            
-            // Determine theme based on background color brightness
-            if (backgroundColor) {
-              const rgb = backgroundColor.match(/rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)/);
-              if (rgb) {
-                const brightness = (parseInt(rgb[1]) * 299 + parseInt(rgb[2]) * 587 + parseInt(rgb[3]) * 114) / 1000;
-                const isDark = brightness < 128;
-                document.body.className = isDark ? 'vscode-body vscode-dark' : 'vscode-body vscode-light';
-              }
-            }
-          }
-          
-          // Apply theme detection on load
-          window.addEventListener('load', detectTheme);
-          
-          // Listen for theme changes (VS Code can change themes dynamically)
-          if (window.matchMedia) {
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', detectTheme);
-            window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', detectTheme);
-          }
-        </script>
     </body>
     </html>`;
-    }
-    async getTemplateDocumentHtml() {
-        const templateDocument = {
-            instructions: "# Welcome to Software 3!\n\nWrite your documentation and explanations here using **Markdown**.\n\n## Getting Started\n- Click the code toggle to see the implementation\n- Edit both blocks directly\n- Save to preserve your changes\n\n## Features\n- **Dual-view blocks** with seamless toggling\n- **Syntax highlighting** for multiple languages\n- **Live editing** with instant preview\n- **Export capabilities** to HTML and Markdown",
-            code: "// Write your code implementation here\nconsole.log('Hello, Software 3!');\n\n// Example function\nfunction example() {\n  return 'This is editable!';\n}\n\n// Try editing this code and switching views\nconst message = example();\nconsole.log(message);"
-        };
-        return await this.generateSimpleView(templateDocument, null);
     }
     getErrorHtml(errorMessage) {
         return `<!DOCTYPE html>
@@ -1273,7 +1129,7 @@ class S3DocumentEditor {
                 <strong>Error details:</strong><br>
                 ${this.escapeHtml(errorMessage)}
             </div>
-            <p><strong>Note:</strong> This file should contain valid Software 3 JSON format with at least a "blocks" array.</p>
+            <p><strong>Note:</strong> This file should contain valid Software 3 JSON format with "instructions", "code", and optional "language" fields.</p>
         </div>
     </body>
     </html>`;
@@ -1371,6 +1227,48 @@ class S3DocumentEditor {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    }
+    formatHtmlCode(html) {
+        if (!html)
+            return '';
+        // Basic HTML beautification
+        let formatted = html;
+        let indentLevel = 0;
+        const indent = '  ';
+        // Add newlines after opening tags
+        formatted = formatted.replace(/(<[^\/][^>]*>)(?=[^<])/g, '$1\n');
+        // Add newlines before closing tags
+        formatted = formatted.replace(/([^>])(<\/[^>]+>)/g, '$1\n$2');
+        // Add newlines between adjacent tags
+        formatted = formatted.replace(/>(<)/g, '>\n<');
+        // Split into lines and add proper indentation
+        const lines = formatted.split('\n');
+        const result = [];
+        for (let line of lines) {
+            line = line.trim();
+            if (!line)
+                continue;
+            // Decrease indent for closing tags
+            if (line.startsWith('</')) {
+                indentLevel = Math.max(0, indentLevel - 1);
+            }
+            // Add the line with proper indentation
+            if (line) {
+                result.push(indent.repeat(indentLevel) + line);
+            }
+            // Increase indent for opening tags (not self-closing)
+            if (line.startsWith('<') && !line.startsWith('</') &&
+                !line.endsWith('/>') && !line.includes('</')) {
+                // Check if it's not a void element
+                const voidElements = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img',
+                    'input', 'link', 'meta', 'param', 'source', 'track', 'wbr'];
+                const tagName = line.match(/<(\w+)/)?.[1]?.toLowerCase();
+                if (!voidElements.includes(tagName || '')) {
+                    indentLevel++;
+                }
+            }
+        }
+        return result.join('\n');
     }
 }
 exports.S3DocumentEditor = S3DocumentEditor;

@@ -1,0 +1,5 @@
+{
+  "instructions": "# Language Field Example\n\nThis file demonstrates the new language field in the S3 format.\n\n## Structure:\nThe S3 file now has three main fields:\n1. **instructions** - Documentation in markdown format\n2. **code** - The actual code implementation\n3. **language** - The programming language (user-specified)\n\n## Usage:\nYou can manually set the language field to specify what language your code is written in.\nThis helps with syntax highlighting and future processing.",
+  "code": "def fibonacci(n):\n    \"\"\"Calculate fibonacci number at position n\"\"\"\n    if n <= 0:\n        return 0\n    elif n == 1:\n        return 1\n    else:\n        return fibonacci(n-1) + fibonacci(n-2)\n\n# Test the function\nfor i in range(10):\n    print(f\"fibonacci({i}) = {fibonacci(i)}\")",
+  "language": "python"
+}
