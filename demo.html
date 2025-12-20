@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>SocialHub - Software 3.0 Web Demo</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif}
+        body{background:#f8f9fa;color:#333;overflow-x:hidden}
+        .top-nav{position:fixed;top:0;left:0;right:0;background:white;border-bottom:1px solid #e1e8ed;padding:0 20px;height:60px;display:flex;align-items:center;justify-content:space-between;z-index:1000;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+        .logo{font-size:24px;font-weight:bold;color:#1da1f2;text-decoration:none}
+        .search-bar{flex:1;max-width:400px;margin:0 30px}
+        .search-input{width:100%;padding:8px 16px;border:1px solid #e1e8ed;border-radius:25px;outline:none;font-size:14px}
+        .search-input:focus{border-color:#1da1f2}
+        .nav-icons{display:flex;gap:20px}
+        .nav-icon{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;position:relative}
+        .nav-icon:hover{background-color:#f8f9fa}
+        .notification-badge{position:absolute;top:8px;right:8px;background:#ff4444;color:white;border-radius:10px;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center}
+        .container{display:flex;margin-top:60px;min-height:calc(100vh-60px)}
+        .left-sidebar{width:250px;background:white;border-right:1px solid #e1e8ed;padding:20px 0;position:fixed;height:calc(100vh-60px);overflow-y:auto}
+        .sidebar-menu{list-style:none}
+        .sidebar-menu li{margin-bottom:5px}
+        .sidebar-menu a{display:flex;align-items:center;padding:12px 25px;color:#666;text-decoration:none;transition:all 0.2s}
+        .sidebar-menu a:hover{background-color:#f8f9fa;color:#1da1f2}
+        .sidebar-menu a.active{background-color:#e8f4fd;color:#1da1f2;border-right:3px solid #1da1f2}
+        .sidebar-menu .icon{margin-right:12px;width:20px;text-align:center}
+        .main-content{flex:1;margin-left:250px;margin-right:300px;padding:20px}
+        .stories{background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+        .stories-header{display:flex;align-items:center;margin-bottom:15px}
+        .stories-title{font-weight:bold;margin-right:15px}
+        .story-list{display:flex;gap:15px;overflow-x:auto;padding-bottom:10px}
+        .story{min-width:80px;text-align:center;cursor:pointer}
+        .story-avatar{width:60px;height:60px;border-radius:50%;background:linear-gradient(45deg,#ff6b6b,#4ecdc4,#45b7d1,#96ceb4);display:flex;align-items:center;justify-content:center;margin:0 auto 8px;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.1);color:white;font-weight:bold}
+        .story-avatar.you{background:#1da1f2}
+        .story-avatar.you::after{content:'+';color:white;font-size:24px;font-weight:bold}
+        .story-name{font-size:12px;color:#666}
+        .create-post{background:white;border-radius:12px;padding:20px;margin-bottom:20px;box-shadow:0 2px 4px rgba(0,0,0,0.1)}
+        .create-post-header{display:flex;align-items:center;margin-bottom:15px}
+        .user-avatar{width:40px;height:40px;border-radius:50%;background:#1da1f2;display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;margin-right:12px}
+        .post-input{flex:1;border:none;outline:none;font-size:16px;color:#666}
+        .post-actions{display:flex;justify-content:space-between;align-items:center;margin-top:15px;padding-top:15px;border-top:1px solid #e1e8ed}
+        .media-buttons{display:flex;gap:15px}
+        .media-btn{display:flex;align-items:center;gap:5px;padding:8px 12px;border:none;background:none;color:#666;cursor:pointer;border-radius:8px}
+        .media-btn:hover{background-color:#f8f9fa}
+        .post-btn{background:#1da1f2;color:white;padding:8px 20px;border:none;border-radius:25px;font-weight:bold;cursor:pointer}
+        .post-btn:hover{background:#1991db}
+        .post-btn:disabled{background:#ccc;cursor:not-allowed}
+        .posts{display:flex;flex-direction:column;gap:20px}
+        .post{background:white;border-radius:12px;padding:20px;box-shadow:0 2px 4px rgba(0,0,0,0.1);animation:fadeIn 0.3s ease-out}
+        .post-header{display:flex;align-items:flex-start;margin-bottom:15px}
+        .post-user-info{display:flex;align-items:center;flex:1}
+        .post-avatar{width:48px;height:48px;border-radius:50%;background:linear-gradient(45deg,#ff6b6b,#4ecdc4);display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;margin-right:12px}
+        .post-info{flex:1}
+        .post-author{font-weight:bold;color:#333;text-decoration:none}
+        .post-author:hover{text-decoration:underline}
+        .post-handle{color:#666;font-size:14px;margin-top:2px}
+        .post-menu{color:#666;cursor:pointer;padding:5px}
+        .post-content{margin-bottom:15px;line-height:1.5}
+        .post-actions{display:flex;justify-content:space-between;align-items:center;padding-top:15px;border-top:1px solid #e1e8ed}
+        .action-buttons{display:flex;gap:20px}
+        .action-btn{display:flex;align-items:center;gap:5px;padding:8px 12px;border:none;background:none;color:#666;cursor:pointer;border-radius:8px;transition:all 0.2s}
+        .action-btn:hover{background-color:#f8f9fa}
+        .action-btn.liked{color:#ff4444}
+        .right-sidebar{width:300px;background:white;border-left:1px solid #e1e8ed;padding:20px;position:fixed;right:0;height:calc(100vh-60px);overflow-y:auto}
+        .sidebar-widget{background:#f8f9fa;border-radius:12px;padding:20px;margin-bottom:20px}
+        .widget-title{font-weight:bold;margin-bottom:15px}
+        .suggested-user{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid #e1e8ed}
+        .suggested-user:last-child{border-bottom:none}
+        .suggested-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(45deg,#ff9ff3,#f368e0);display:flex;align-items:center;justify-content:center;color:white;font-weight:bold;margin-right:12px}
+        .suggested-info{flex:1}
+        .suggested-name{font-weight:bold;color:#333;text-decoration:none}
+        .suggested-handle{color:#666;font-size:14px;margin-top:2px}
+        .follow-btn{background:#1da1f2;color:white;padding:6px 16px;border:none;border-radius:25px;font-weight:bold;cursor:pointer;transition:all 0.2s}
+        .follow-btn:hover{background:#1991db}
+        .floating-post-btn{position:fixed;bottom:30px;right:30px;width:60px;height:60px;background:#1da1f2;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:24px;cursor:pointer;box-shadow:0 4px 12px rgba(29,161,242,0.4);z-index:1000;transition:all 0.2s}
+        .floating-post-btn:hover{transform:scale(1.1)}
+        .trending-topic{display:flex;align-items:center;padding:10px 0;border-bottom:1px solid #e1e8ed}
+        .trending-topic:last-child{border-bottom:none}
+        .topic-number{width:20px;color:#666;font-size:14px}
+        .topic-content{flex:1;margin-left:10px}
+        .topic-name{font-weight:bold;color:#333}
+        .topic-stats{color:#666;font-size:12px;margin-top:2px}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+        @media(max-width:768px){
+            .left-sidebar,.right-sidebar{display:none}
+            .main-content{margin-left:0;margin-right:0}
+            .mobile-nav{position:fixed;bottom:0;left:0;right:0;background:white;border-top:1px solid #e1e8ed;display:flex;justify-content:space-around;padding:10px 0;z-index:1000}
+            .mobile-nav-item{display:flex;flex-direction:column;align-items:center;gap:5px;color:#666;text-decoration:none;font-size:12px}
+            .mobile-nav-item.active{color:#1da1f2}
+            .floating-post-btn{bottom:90px}
+            .container{margin-bottom:70px}
+        }
+    </style>
+</head>
+<body>
+    <!-- Software 3.0 Demo Header -->
+    <div style="position:fixed;top:0;left:0;right:0;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:5px 20px;font-size:12px;text-align:center;z-index:1001;">
+        🚀 <strong>Software 3.0 Live Demo</strong> - This entire social media platform was generated from natural language instructions
+    </div>
+
+    <nav class="top-nav" style="top:30px;">
+        <a href="#" class="logo">SocialHub</a>
+        <div class="search-bar">
+            <input type="text" class="search-input" placeholder="Search SocialHub...">
+        </div>
+        <div class="nav-icons">
+            <div class="nav-icon" title="Home">
+                <span>🏠</span>
+            </div>
+            <div class="nav-icon" title="Explore">
+                <span>🔍</span>
+            </div>
+            <div class="nav-icon" title="Notifications">
+                <span>🔔</span>
+                <div class="notification-badge">3</div>
+            </div>
+            <div class="nav-icon" title="Messages">
+                <span>✉️</span>
+            </div>
+            <div class="nav-icon" title="Profile">
+                <span>👤</span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container" style="margin-top:90px;">
+        <aside class="left-sidebar" style="top:90px;">
+            <ul class="sidebar-menu">
+                <li><a href="#" class="active"><span class="icon">🏠</span>Home</a></li>
+                <li><a href="#"><span class="icon">🔍</span>Explore</a></li>
+                <li><a href="#"><span class="icon">🔔</span>Notifications</a></li>
+                <li><a href="#"><span class="icon">✉️</span>Messages</a></li>
+                <li><a href="#"><span class="icon">👥</span>Groups</a></li>
+                <li><a href="#"><span class="icon">⚙️</span>Settings</a></li>
+            </ul>
+        </aside>
+
+        <main class="main-content">
+            <section class="stories">
+                <div class="stories-header">
+                    <h2 class="stories-title">Stories</h2>
+                    <span style="color:#666;font-size:14px;">Watch all</span>
+                </div>
+                <div class="story-list">
+                    <div class="story">
+                        <div class="story-avatar you"></div>
+                        <div class="story-name">Your story</div>
+                    </div>
+                    <div class="story">
+                        <div class="story-avatar">A</div>
+                        <div class="story-name">Alice</div>
+                    </div>
+                    <div class="story">
+                        <div class="story-avatar">B</div>
+                        <div class="story-name">Bob</div>
+                    </div>
+                    <div class="story">
+                        <div class="story-avatar">C</div>
+                        <div class="story-name">Charlie</div>
+                    </div>
+                    <div class="story">
+                        <div class="story-avatar">D</div>
+                        <div class="story-name">Diana</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="create-post">
+                <div class="create-post-header">
+                    <div class="user-avatar">Y</div>
+                    <input type="text" class="post-input" placeholder="What's happening?">
+                </div>
+                <div class="post-actions">
+                    <div class="media-buttons">
+                        <button class="media-btn" title="Add photo">
+                            <span>📷</span> Photo
+                        </button>
+                        <button class="media-btn" title="Add video">
+                            <span>🎥</span> Video
+                        </button>
+                        <button class="media-btn" title="Add GIF">
+                            <span>🎭</span> GIF
+                        </button>
+                    </div>
+                    <button class="post-btn" disabled>Post</button>
+                </div>
+            </section>
+
+            <div class="posts">
+                <article class="post">
+                    <div class="post-header">
+                        <div class="post-user-info">
+                            <div class="post-avatar">JD</div>
+                            <div class="post-info">
+                                <a href="#" class="post-author">John Doe</a>
+                                <div class="post-handle">@johndoe • 2h</div>
+                            </div>
+                        </div>
+                        <div class="post-menu">⋯</div>
+                    </div>
+                    <div class="post-content">
+                        Just finished an amazing hike! 🏔️ The view from the top was absolutely breathtaking. Nature never fails to inspire me. #Hiking #Nature #Adventure
+                    </div>
+                    <div class="post-actions">
+                        <div class="action-buttons">
+                            <button class="action-btn" title="Reply">
+                                <span>💬</span>
+                                <span class="action-count">12</span>
+                            </button>
+                            <button class="action-btn" title="Repost">
+                                <span>🔄</span>
+                                <span class="action-count">5</span>
+                            </button>
+                            <button class="action-btn" title="Like">
+                                <span>🤍</span>
+                                <span class="action-count">42</span>
+                            </button>
+                            <button class="action-btn" title="Share">
+                                <span>📤</span>
+                            </button>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="post">
+                    <div class="post-header">
+                        <div class="post-user-info">
+                            <div class="post-avatar" style="background:linear-gradient(45deg,#96ceb4,#ffecd2);">AS</div>
+                            <div class="post-info">
+                                <a href="#" class="post-author">Alice Smith</a>
+                                <div class="post-handle">@alicesmith • 4h</div>
+                            </div>
+                        </div>
+                        <div class="post-menu">⋯</div>
+                    </div>
+                    <div class="post-content">
+                        Working on a new Software 3.0 project! 🚀 It's amazing how natural language can become executable code. The future of programming is here! #Software3 #AI #Programming
+                    </div>
+                    <div class="post-actions">
+                        <div class="action-buttons">
+                            <button class="action-btn" title="Reply">
+                                <span>💬</span>
+                                <span class="action-count">8</span>
+                            </button>
+                            <button class="action-btn" title="Repost">
+                                <span>🔄</span>
+                                <span class="action-count">15</span>
+                            </button>
+                            <button class="action-btn liked" title="Like">
+                                <span>❤️</span>
+                                <span class="action-count">127</span>
+                            </button>
+                            <button class="action-btn" title="Share">
+                                <span>📤</span>
+                            </button>
+                        </div>
+                    </div>
+                </article>
+
+                <article class="post">
+                    <div class="post-header">
+                        <div class="post-user-info">
+                            <div class="post-avatar" style="background:linear-gradient(45deg,#a8edea,#fed6e3);">TG</div>
+                            <div class="post-info">
+                                <a href="#" class="post-author">Tech Guru</a>
+                                <div class="post-handle">@techguru • 6h</div>
+                            </div>
+                        </div>
+                        <div class="post-menu">⋯</div>
+                    </div>
+                    <div class="post-content">
+                        Just discovered this incredible demo built with Software 3.0! 🎯 From natural language instructions to a fully functional social media platform. This is the paradigm shift we've been waiting for. #Innovation #WebDev
+                    </div>
+                    <div class="post-actions">
+                        <div class="action-buttons">
+                            <button class="action-btn" title="Reply">
+                                <span>💬</span>
+                                <span class="action-count">23</span>
+                            </button>
+                            <button class="action-btn" title="Repost">
+                                <span>🔄</span>
+                                <span class="action-count">31</span>
+                            </button>
+                            <button class="action-btn" title="Like">
+                                <span>🤍</span>
+                                <span class="action-count">89</span>
+                            </button>
+                            <button class="action-btn" title="Share">
+                                <span>📤</span>
+                            </button>
+                        </div>
+                    </div>
+                </article>
+            </div>
+        </main>
+
+        <aside class="right-sidebar" style="top:90px;">
+            <div class="sidebar-widget">
+                <h3 class="widget-title">Who to follow</h3>
+                <div class="suggested-user">
+                    <div class="suggested-avatar">TS</div>
+                    <div class="suggested-info">
+                        <a href="#" class="suggested-name">Tech Startup</a>
+                        <div class="suggested-handle">@techstartup</div>
+                    </div>
+                    <button class="follow-btn">Follow</button>
+                </div>
+                <div class="suggested-user">
+                    <div class="suggested-avatar" style="background:linear-gradient(45deg,#667eea,#764ba2);">AI</div>
+                    <div class="suggested-info">
+                        <a href="#" class="suggested-name">AI Research</a>
+                        <div class="suggested-handle">@airesearch</div>
+                    </div>
+                    <button class="follow-btn">Follow</button>
+                </div>
+                <div class="suggested-user">
+                    <div class="suggested-avatar" style="background:linear-gradient(45deg,#ffecd2,#fcb69f);">WD</div>
+                    <div class="suggested-info">
+                        <a href="#" class="suggested-name">Web Dev Tips</a>
+                        <div class="suggested-handle">@webdevtips</div>
+                    </div>
+                    <button class="follow-btn">Follow</button>
+                </div>
+            </div>
+
+            <div class="sidebar-widget">
+                <h3 class="widget-title">Trending</h3>
+                <div class="trending-topic">
+                    <div class="topic-number">1</div>
+                    <div class="topic-content">
+                        <div class="topic-name">#Software3</div>
+                        <div class="topic-stats">42.1K posts</div>
+                    </div>
+                </div>
+                <div class="trending-topic">
+                    <div class="topic-number">2</div>
+                    <div class="topic-content">
+                        <div class="topic-name">#WebDev</div>
+                        <div class="topic-stats">28.7K posts</div>
+                    </div>
+                </div>
+                <div class="trending-topic">
+                    <div class="topic-number">3</div>
+                    <div class="topic-content">
+                        <div class="topic-name">#AI</div>
+                        <div class="topic-stats">156.3K posts</div>
+                    </div>
+                </div>
+                <div class="trending-topic">
+                    <div class="topic-number">4</div>
+                    <div class="topic-content">
+                        <div class="topic-name">#Programming</div>
+                        <div class="topic-stats">89.2K posts</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <button class="floating-post-btn" title="Create Post">+</button>
+
+    <nav class="mobile-nav">
+        <a href="#" class="mobile-nav-item active">
+            <span>🏠</span>
+            <span>Home</span>
+        </a>
+        <a href="#" class="mobile-nav-item">
+            <span>🔍</span>
+            <span>Explore</span>
+        </a>
+        <a href="#" class="mobile-nav-item">
+            <span>🔔</span>
+            <span>Notifications</span>
+        </a>
+        <a href="#" class="mobile-nav-item">
+            <span>✉️</span>
+            <span>Messages</span>
+        </a>
+        <a href="#" class="mobile-nav-item">
+            <span>👤</span>
+            <span>Profile</span>
+        </a>
+    </nav>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Post creation functionality
+            const postInput = document.querySelector('.post-input');
+            const postBtn = document.querySelector('.post-btn');
+            
+            postInput.addEventListener('input', function() {
+                postBtn.disabled = this.value.trim().length === 0;
+                if (!this.disabled) {
+                    postBtn.style.background = '#1da1f2';
+                } else {
+                    postBtn.style.background = '#ccc';
+                }
+            });
+            
+            // Like functionality with animation
+            document.querySelectorAll('.action-btn[title="Like"]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    this.classList.toggle('liked');
+                    const heartIcon = this.querySelector('span:first-child');
+                    const count = this.querySelector('.action-count');
+                    const currentCount = parseInt(count.textContent);
+                    
+                    if (this.classList.contains('liked')) {
+                        heartIcon.textContent = '❤️';
+                        count.textContent = currentCount + 1;
+                        this.style.color = '#ff4444';
+                    } else {
+                        heartIcon.textContent = '🤍';
+                        count.textContent = currentCount - 1;
+                        this.style.color = '#666';
+                    }
+                });
+            });
+            
+            // Follow/Unfollow functionality
+            document.querySelectorAll('.follow-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    if (this.textContent === 'Follow') {
+                        this.textContent = 'Following';
+                        this.style.background = '#666';
+                    } else {
+                        this.textContent = 'Follow';
+                        this.style.background = '#1da1f2';
+                    }
+                });
+            });
+            
+            // Floating post button functionality
+            document.querySelector('.floating-post-btn').addEventListener('click', function() {
+                postInput.focus();
+                postInput.scrollIntoView({ behavior: 'smooth' });
+            });
+            
+            // Add some interactive animations
+            document.querySelectorAll('.story').forEach(story => {
+                story.addEventListener('click', function() {
+                    const avatar = this.querySelector('.story-avatar');
+                    avatar.style.transform = 'scale(1.1)';
+                    setTimeout(() => {
+                        avatar.style.transform = 'scale(1)';
+                    }, 200);
+                });
+            });
+            
+            // Simulate real-time updates
+            setInterval(() => {
+                const notifications = document.querySelector('.notification-badge');
+                if (notifications) {
+                    const current = parseInt(notifications.textContent);
+                    if (Math.random() > 0.95) { // 5% chance every second
+                        notifications.textContent = current + 1;
+                        notifications.style.animation = 'none';
+                        setTimeout(() => {
+                            notifications.style.animation = 'pulse 0.5s ease-in-out';
+                        }, 10);
+                    }
+                }
+            }, 1000);
+        });
+        
+        // Add CSS animation for pulse effect
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes pulse {
+                0% { transform: scale(1); }
+                50% { transform: scale(1.2); }
+                100% { transform: scale(1); }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
+
+

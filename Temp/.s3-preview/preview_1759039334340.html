@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>
+        SocialConnect - Modern Social Media
+      </title>
+      <style>
+        * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: Arial, sans-serif;
+        }
+        body {
+        background-color: #f5f5f5;
+        color: #333;
+        line-height: 1.6;
+        }
+        .app-bar {
+        position: fixed;
+        top: 0;
+        width: 100%;
+        background-color: #fff;
+        border-bottom: 1px solid #e0e0e0;
+        padding: 10px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 1000;
+        }
+        .logo {
+        font-size: 24px;
+        font-weight: bold;
+        color: #4267b2;
+        }
+        .search-bar {
+        flex: 1;
+        max-width: 400px;
+        margin: 0 20px;
+        }
+        .search-bar input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 20px;
+        }
+        .nav-icons {
+        display: flex;
+        gap: 15px;
+        }
+        .nav-icons a {
+        color: #666;
+        text-decoration: none;
+        font-size: 18px;
+        }
+        .nav-icons a:hover {
+        color: #4267b2;
+        }
+        .container {
+        display: flex;
+        margin-top: 60px;
+        }
+        .sidebar-left {
+        width: 250px;
+        background-color: #fff;
+        padding: 20px;
+        border-right: 1px solid #e0e0e0;
+        position: fixed;
+        height: calc(100vh - 60px);
+        overflow-y: auto;
+        }
+        .sidebar-left ul {
+        list-style: none;
+        }
+        .sidebar-left li {
+        margin-bottom: 15px;
+        }
+        .sidebar-left a {
+        color: #333;
+        text-decoration: none;
+        display: block;
+        padding: 10px;
+        border-radius: 5px;
+        }
+        .sidebar-left a:hover {
+        background-color: #f0f2f5;
+        }
+        .main-content {
+        flex: 1;
+        margin-left: 250px;
+        margin-right: 300px;
+        padding: 20px;
+        }
+        .sidebar-right {
+        width: 300px;
+        background-color: #fff;
+        padding: 20px;
+        border-left: 1px solid #e0e0e0;
+        position: fixed;
+        right: 0;
+        top: 60px;
+        height: calc(100vh - 60px);
+        overflow-y: auto;
+        }
+        .post-card {
+        background-color: #fff;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        padding: 15px;
+        }
+        .post-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 10px;
+        }
+        .profile-pic {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        margin-right: 10px;
+        background-color: #ccc;
+        }
+        .post-actions {
+        display: flex;
+        justify-content: space-around;
+        margin-top: 10px;
+        }
+        .btn {
+        background-color: #4267b2;
+        color: #fff;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 5px;
+        cursor: pointer;
+        }
+        .btn:hover {
+        background-color: #365899;
+        }
+        .btn-secondary {
+        background-color: #e4e6ea;
+        color: #333;
+        }
+        .btn-secondary:hover {
+        background-color: #d8dade;
+        }
+        .notification {
+        background-color: #ffeb3b;
+        color: #333;
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        }
+        .profile-page {
+        text-align: center;
+        }
+        .cover-photo {
+        height: 200px;
+        background-color: #4267b2;
+        margin-bottom: 20px;
+        }
+        .profile-pic-large {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        margin: -60px auto 10px;
+        background-color: #ccc;
+        border: 5px solid #fff;
+        }
+        .bio {
+        margin-bottom: 20px;
+        }
+        .stats {
+        display: flex;
+        justify-content: center;
+        gap: 20px;
+        margin-bottom: 20px;
+        }
+        .mobile-nav {
+        display: none;
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background-color: #fff;
+        border-top: 1px solid #e0e0e0;
+        padding: 10px;
+        justify-content: space-around;
+        }
+        .floating-btn {
+        position: fixed;
+        bottom: 80px;
+        right: 20px;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background-color: #4267b2;
+        color: #fff;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        }
+        @media (max-width: 768px) {
+        .sidebar-left, .sidebar-right {
+        display: none;
+        }
+        .main-content {
+        margin-left: 0;
+        margin-right: 0;
+        }
+        .mobile-nav {
+        display: flex;
+        }
+        .app-bar {
+        padding: 10px;
+        }
+        .search-bar {
+        display: none;
+        }
+        }
+      </style>
+    </head>
+    <body>
+      <header class="app-bar">
+        <div class="logo">
+          SocialConnect
+        </div>
+        <div class="search-bar">
+          <input type="text" placeholder="Search...">
+        </div>
+        <div class="nav-icons">
+          <a href="#">
+            Home
+          </a>
+          <a href="#">
+            Profile
+          </a>
+          <a href="#">
+            Messages
+          </a>
+          <a href="#">
+            Notifications
+          </a>
+          <a href="#">
+            Post
+          </a>
+        </div>
+      </header>
+      <div class="container">
+        <aside class="sidebar-left">
+          <ul>
+            <li>
+              <a href="#">
+                Explore
+              </a>
+            </li>
+            <li>
+              <a href="#">
+                Groups
+              </a>
+            </li>
+            <li>
+              <a href="#">
+                Settings
+              </a>
+            </li>
+          </ul>
+        </aside>
+        <main class="main-content">
+          <div class="notification">
+            You have new notifications!
+          </div>
+          <div class="post-card">
+            <div class="post-header">
+              <div class="profile-pic">
+              </div>
+              <div>
+                <strong>
+                  User Name
+                </strong>
+                <br>
+                <small>
+                  2 hours ago
+                </small>
+              </div>
+            </div>
+            <p>
+              This is a sample post. Users can share text, photos, videos, or links here.
+            </p>
+            <div class="post-actions">
+              <button class="btn-secondary">
+                Like
+              </button>
+              <button class="btn-secondary">
+                Comment
+              </button>
+              <button class="btn-secondary">
+                Share
+              </button>
+            </div>
+          </div>
+          <div class="post-card">
+            <div class="post-header">
+              <div class="profile-pic">
+              </div>
+              <div>
+                <strong>
+                  Another User
+                </strong>
+                <br>
+                <small>
+                  5 hours ago
+                </small>
+              </div>
+            </div>
+            <p>
+              Another sample post with engagement features.
+            </p>
+            <div class="post-actions">
+              <button class="btn-secondary">
+                Like
+              </button>
+              <button class="btn-secondary">
+                Comment
+              </button>
+              <button class="btn-secondary">
+                Share
+              </button>
+            </div>
+          </div>
+        </main>
+        <aside class="sidebar-right">
+          <h3>
+            Suggested Accounts
+          </h3>
+          <p>
+            Follow these users for more content.
+          </p>
+          <h3>
+            Trending Hashtags
+          </h3>
+          <p>
+            #TrendingTopic #AnotherTag
+          </p>
+        </aside>
+      </div>
+      <button class="floating-btn">
+        +
+      </button>
+      <nav class="mobile-nav">
+        <a href="#">
+          Home
+        </a>
+        <a href="#">
+          Explore
+        </a>
+        <a href="#">
+          Messages
+        </a>
+        <a href="#">
+          Profile
+        </a>
+      </nav>
+      <script>
+        // Simple interactivity for demonstration
+        document.querySelectorAll('.btn-secondary').forEach(btn => {
+        btn.addEventListener('click', () => {
+        alert('Action performed!');
+        });
+        });
+        // Placeholder for stories, direct messages, live streaming, etc.
+        // In a real app, these would be implemented with more complex JS
+        console.log('Social media features ready');
+      </script>
+    </body>
+  </html>
